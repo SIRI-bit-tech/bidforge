@@ -1,0 +1,18 @@
+# GraphQL Code Generator configuration for TypeScript types
+overwrite: true
+schema: "lib/graphql/schema.ts"
+documents: "lib/graphql/queries/**/*.ts"
+generates:
+  lib/graphql/generated/types.ts:
+    plugins:
+      - "typescript"
+      - "typescript-operations"
+      - "typescript-urql"
+    config:
+      withHooks: true
+      withComponent: false
+      withHOC: false
+      skipTypename: false
+      enumsAsTypes: true
+      futureProofEnums: true
+      dedupeFragments: true

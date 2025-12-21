@@ -10,7 +10,7 @@ export interface AuthUser {
 /**
  * Extract and verify JWT token from httpOnly cookie
  */
-export async function getAuthUserFromCookie(request: NextRequest): Promise<AuthUser | null> {
+export function getAuthUserFromCookie(request: NextRequest): AuthUser | null {
   try {
     const token = request.cookies.get('auth-token')?.value
     
@@ -18,7 +18,7 @@ export async function getAuthUserFromCookie(request: NextRequest): Promise<AuthU
       return null
     }
 
-    const payload = await verifyJWT(token)
+    const payload = verifyJWT(token)
     
     if (!payload || !payload.userId || !payload.role) {
       return null
@@ -38,15 +38,15 @@ export async function getAuthUserFromCookie(request: NextRequest): Promise<AuthU
 /**
  * Check if user is authenticated from cookie
  */
-export async function isAuthenticated(request: NextRequest): Promise<boolean> {
-  const user = await getAuthUserFromCookie(request)
+export function isAuthenticated(request: NextRequest): boolean {
+  const user = getAuthUserFromCookie(request)
   return user !== null
 }
 
 /**
  * Check if user has specific role
  */
-export async function hasRole(request: NextRequest, requiredRole: string): Promise<boolean> {
-  const user = await getAuthUserFromCookie(request)
+export function hasRole(request: NextRequest, requiredRole: string): boolean {
+  const user = getAuthUserFromCookie(request)
   return user?.role === requiredRole
 }

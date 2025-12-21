@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 export async function GET(request: NextRequest) {
   try {
     // Get user from httpOnly cookie
-    const authUser = await getAuthUserFromCookie(request)
+    const authUser = getAuthUserFromCookie(request)
     
     if (!authUser) {
       return NextResponse.json(

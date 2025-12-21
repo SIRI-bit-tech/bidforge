@@ -1,17 +1,29 @@
-import jwt from "jsonwebtoken"
+import jwt, { SignOptions } from "jsonwebtoken"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+// Secure JWT secret retrieval - fails fast if not configured
+export function getJWTSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required but not configured. Please set JWT_SECRET in your environment variables.')
+  }
+  return secret
+}
 
 // JWT token utilities for GraphQL authentication
-export function signJWT(payload: any, expiresIn = "7d"): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn })
+export function signJWT(payload: object, expiresIn = "7d"): string {
+  return jwt.sign(payload, getJWTSecret(), { expiresIn } as SignOptions)
 }
 
-export async function verifyJWT(token: string): Promise<any> {
-  try {
-    return jwt.verify(token, JWT_SECRET)
-  } catch (error) {
-    console.error("[v0] JWT verification error:", error)
-    return null
-  }
+// Type guard to validate JWT payload structure
+function isValidJWTPayload(payload: unknown): payload is { userId: string; role: string; companyId?: string } {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    typeof (payload as any).userId === 'string' &&
+    typeof (payload as any).role === 'string' &&
+    ((payload as any).companyId === undefined || typeof (payload as any).companyId === 'string')
+  )
 }
+
+// Note: verifyJWT has been moved to lib/services/auth.ts for better security validation
+// Import verifyJWT from '@/lib/services/auth' instead of this file

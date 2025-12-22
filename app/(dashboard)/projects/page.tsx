@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { ProjectCard } from "@/components/project-card"
@@ -11,10 +11,37 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function ProjectsPage() {
   const router = useRouter()
-  const { currentUser, projects, getBidsByProject } = useStore()
+  const { currentUser, projects, getBidsByProject, loadProjects } = useStore()
   const [activeTab, setActiveTab] = useState("all")
+  const [loading, setLoading] = useState(true)
+
+  // Load projects on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await loadProjects()
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [loadProjects])
 
   if (!currentUser) return null
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading projects...</p>
+        </div>
+      </div>
+    )
+  }
 
   const userProjects = projects.filter((p) => p.createdBy === currentUser.id)
   const filteredProjects =

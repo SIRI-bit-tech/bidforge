@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { signJWT } from '@/lib/utils/jwt'
+import { generateJWT } from '@/lib/services/auth'
 import { db, users, verificationCodes } from '@/lib/db'
 import { eq, and, gt } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
@@ -42,12 +42,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log verification attempt (for security monitoring)
-    console.info('Email verification attempt:', {
-      email: email.replace(/(.{2}).*(@.*)/, '$1***$2'), // Partially mask email
-      timestamp: new Date().toISOString(),
-      ip: rateLimitKey.split(':')[1]
-    })
+
 
     // Find user by email
     const [user] = await db
@@ -122,19 +117,15 @@ export async function POST(request: NextRequest) {
           .where(eq(verificationCodes.id, verificationRecord.id))
       })
 
-      console.info('Email verification successful:', {
-        userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+
 
       // Generate JWT token for automatic login after verification
       const tokenPayload = { 
         userId: user.id, 
         role: user.role,
-        companyId: user.companyId 
+        companyId: user.companyId || undefined
       }
-      const token = signJWT(tokenPayload, '30d')
+      const token = generateJWT(tokenPayload)
 
       // Create response with user data
       const response = NextResponse.json({

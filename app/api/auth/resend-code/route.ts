@@ -30,12 +30,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log resend attempt for security monitoring
-    console.info('Verification code resend requested:', {
-      email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-      timestamp: new Date().toISOString(),
-      ip: rateLimitKey.split(':')[1]
-    })
+
 
     // Find user by email
     const [user] = await db
@@ -95,11 +90,7 @@ export async function POST(request: NextRequest) {
           })
       })
 
-      console.info('New verification code generated:', {
-        userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+
 
     } catch (dbError) {
       console.error('Database error during code generation:', dbError)
@@ -112,11 +103,7 @@ export async function POST(request: NextRequest) {
     // Send verification email
     try {
       await sendVerificationEmail(email, verificationData.code, user.name)
-      console.info('Verification code resent successfully:', {
-        userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+
     } catch (error) {
       console.error("Failed to send verification email:", error)
       return NextResponse.json(

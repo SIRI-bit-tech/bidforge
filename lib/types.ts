@@ -65,12 +65,17 @@ export interface Project {
   title: string
   description: string
   location: string
-  budget: number
-  startDate: Date
-  endDate: Date
+  city?: string
+  state?: string
+  budgetMin?: number
+  budgetMax?: number
+  budget?: number // Keep for backward compatibility
+  startDate: Date | null
+  endDate: Date | null
   deadline: Date
   status: ProjectStatus
   createdBy: string
+  createdById?: string // Database uses createdById
   trades: TradeCategory[]
   createdAt: Date
   updatedAt: Date

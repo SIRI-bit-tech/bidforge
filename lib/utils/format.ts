@@ -1,47 +1,89 @@
 // Utility functions for formatting data
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '' || isNaN(Number(amount))) {
+    return "Not specified"
+  }
+  
+  const numAmount = Number(amount)
+  
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(numAmount)
 }
 
-export function formatDate(date: Date): string {
+export function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return "Not specified"
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  // Check if the date is valid
+  if (isNaN(dateObj.getTime())) {
+    return "Invalid date"
+  }
+  
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(date)
+  }).format(dateObj)
 }
 
-export function formatDateTime(date: Date): string {
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (!date) return "Not specified"
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  // Check if the date is valid
+  if (isNaN(dateObj.getTime())) {
+    return "Invalid date"
+  }
+  
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(date)
+  }).format(dateObj)
 }
 
-export function formatRelativeTime(date: Date): string {
+export function formatRelativeTime(date: Date | string | null | undefined): string {
+  if (!date) return "Unknown"
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  // Check if the date is valid
+  if (isNaN(dateObj.getTime())) {
+    return "Invalid date"
+  }
+  
   const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  const diffInSeconds = Math.floor((now.getTime() - dateObj.getTime()) / 1000)
 
   if (diffInSeconds < 60) return "just now"
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
 
-  return formatDate(date)
+  return formatDate(dateObj)
 }
 
-export function formatTimeUntil(date: Date): string {
+export function formatTimeUntil(date: Date | string | null | undefined): string {
+  if (!date) return "Not specified"
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  // Check if the date is valid
+  if (isNaN(dateObj.getTime())) {
+    return "Invalid date"
+  }
+  
   const now = new Date()
-  const diffInMs = date.getTime() - now.getTime()
+  const diffInMs = dateObj.getTime() - now.getTime()
 
   if (diffInMs < 0) return "Expired"
 
@@ -94,4 +136,12 @@ export function getStatusLabel(status: string): string {
     .split("_")
     .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
     .join(" ")
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }

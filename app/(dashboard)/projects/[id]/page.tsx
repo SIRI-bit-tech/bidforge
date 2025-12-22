@@ -1,12 +1,14 @@
 "use client"
 
-import { use } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { BidCard } from "@/components/bid-card"
 import { EmptyState } from "@/components/empty-state"
 import { StatusBadge } from "@/components/status-badge"
+import { DocumentUpload } from "@/components/document-upload"
+import { DocumentViewer } from "@/components/document-viewer"
 import { formatCurrency, formatDate, formatTimeUntil, getTradeLabel } from "@/lib/utils/format"
 import { ArrowLeft, MapPin, DollarSign, Calendar, Clock, Users, FileText } from "lucide-react"
 import Link from "next/link"
@@ -14,10 +16,43 @@ import Link from "next/link"
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { projects, getBidsByProject, companies, users, publishProject, closeProject } = useStore()
+  const { projects, getBidsByProject, companies, users, publishProject, closeProject, loadProjects, currentUser } = useStore()
+  const [loading, setLoading] = useState(true)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
+
+  // Load projects on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await loadProjects()
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [loadProjects])
 
   const project = projects.find((p) => p.id === id)
   const projectBids = project ? getBidsByProject(project.id) : []
+  
+  // Check if current user is the project owner
+  const isProjectOwner = currentUser && project && (project.createdBy === currentUser.id || project.createdById === currentUser.id)
+  const isSubcontractor = currentUser?.role === 'SUBCONTRACTOR'
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading project...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!project) {
     return (
@@ -42,9 +77,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div>
       <div className="mb-8">
-        <Link href="/projects" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+        <Link 
+          href={isSubcontractor ? "/opportunities" : "/projects"} 
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Projects
+          {isSubcontractor ? "Back to Opportunities" : "Back to Projects"}
         </Link>
       </div>
 
@@ -57,7 +95,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <StatusBadge status={project.status} />
               </div>
               <div className="flex gap-2">
-                {project.status === "DRAFT" && (
+                {/* Only show contractor actions if user is the project owner */}
+                {isProjectOwner && project.status === "DRAFT" && (
                   <Button
                     onClick={() => {
                       publishProject(project.id)
@@ -68,7 +107,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     Publish Project
                   </Button>
                 )}
-                {project.status === "PUBLISHED" && (
+                {isProjectOwner && project.status === "PUBLISHED" && (
                   <Button
                     onClick={() => {
                       closeProject(project.id)
@@ -77,6 +116,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     variant="outline"
                   >
                     Close Bidding
+                  </Button>
+                )}
+                {/* Subcontractor actions */}
+                {isSubcontractor && project.status === "PUBLISHED" && (
+                  <Button
+                    onClick={() => router.push(`/projects/${project.id}/bid`)}
+                    className="bg-accent hover:bg-accent-hover text-white"
+                  >
+                    Submit Bid
                   </Button>
                 )}
               </div>
@@ -91,12 +139,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span>Budget: {formatCurrency(project.budget)}</span>
+                <span>
+                  Budget: {(project as any).budgetMin && (project as any).budgetMax 
+                    ? `${formatCurrency(Number((project as any).budgetMin))} - ${formatCurrency(Number((project as any).budgetMax))}`
+                    : project.budget 
+                    ? formatCurrency(project.budget)
+                    : 'Not specified'
+                  }
+                </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>
-                  {formatDate(project.startDate)} - {formatDate(project.endDate)}
+                  {project.startDate && project.endDate 
+                    ? `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
+                    : 'Dates not specified'
+                  }
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
@@ -110,34 +168,42 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div>
               <h3 className="font-semibold text-sm mb-2">Required Trades</h3>
               <div className="flex flex-wrap gap-2">
-                {project.trades.map((trade) => (
+                {(project.trades || []).map((trade) => (
                   <span key={trade} className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
                     {getTradeLabel(trade)}
                   </span>
                 ))}
+                {(!project.trades || project.trades.length === 0) && (
+                  <span className="text-sm text-muted-foreground">No specific trades required</span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-xl font-semibold mb-4">Bids Received ({projectBids.length})</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              {isProjectOwner ? `Bids Received (${projectBids.length})` : 'Project Bids'}
+            </h2>
 
             {projectBids.length > 0 ? (
               <>
-                <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-border">
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Average Bid</div>
-                    <div className="text-lg font-bold">{formatCurrency(avgBidAmount)}</div>
+                {/* Only show bid statistics to project owner */}
+                {isProjectOwner && (
+                  <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-border">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Average Bid</div>
+                      <div className="text-lg font-bold">{formatCurrency(avgBidAmount)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Lowest Bid</div>
+                      <div className="text-lg font-bold text-success">{formatCurrency(lowestBid)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Highest Bid</div>
+                      <div className="text-lg font-bold text-destructive">{formatCurrency(highestBid)}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Lowest Bid</div>
-                    <div className="text-lg font-bold text-success">{formatCurrency(lowestBid)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Highest Bid</div>
-                    <div className="text-lg font-bold text-destructive">{formatCurrency(highestBid)}</div>
-                  </div>
-                </div>
+                )}
 
                 <div className="space-y-4">
                   {projectBids.map((bid) => {
@@ -150,12 +216,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               <EmptyState
                 icon={Users}
-                title="No bids yet"
-                description="Invite subcontractors to start receiving bids for this project"
-                action={{
-                  label: "Invite Subcontractors",
-                  onClick: () => router.push("/subcontractors"),
-                }}
+                title={isProjectOwner ? "No bids yet" : "No bids submitted"}
+                description={
+                  isProjectOwner 
+                    ? "Invite subcontractors to start receiving bids for this project"
+                    : "This project hasn't received any bids yet"
+                }
+                action={
+                  isProjectOwner 
+                    ? {
+                        label: "Invite Subcontractors",
+                        onClick: () => router.push("/subcontractors"),
+                      }
+                    : undefined
+                }
               />
             )}
           </div>
@@ -163,28 +237,115 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         <div className="space-y-6">
           <div className="rounded-lg border border-border bg-card p-6">
-            <h3 className="font-semibold mb-4">Project Actions</h3>
+            <h3 className="font-semibold mb-4">
+              {isProjectOwner ? "Project Actions" : "Available Actions"}
+            </h3>
             <div className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start bg-transparent"
-                onClick={() => router.push("/subcontractors")}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Invite Subcontractors
-              </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <FileText className="h-4 w-4 mr-2" />
-                Upload Documents
-              </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <Calendar className="h-4 w-4 mr-2" />
-                View Timeline
-              </Button>
+              {/* Contractor-only actions */}
+              {isProjectOwner && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => router.push("/subcontractors")}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Invite Subcontractors
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => setUploadModalOpen(true)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Upload Documents
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => setViewDocumentsOpen(true)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Documents
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start bg-transparent">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    View Timeline
+                  </Button>
+                </>
+              )}
+              
+              {/* Subcontractor actions */}
+              {isSubcontractor && (
+                <>
+                  {project.status === "PUBLISHED" && (
+                    <Button
+                      className="w-full justify-start bg-accent hover:bg-accent-hover text-white"
+                      onClick={() => router.push(`/projects/${project.id}/bid`)}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Submit Bid
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => {
+                      // Navigate to messages with pre-selected conversation
+                      const contractorId = project.createdById || project.createdBy
+                      router.push(`/messages?project=${project.id}&user=${contractorId}`)
+                    }}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Contact Contractor
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => setViewDocumentsOpen(true)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Documents
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => {
+                      // Navigate to project timeline page (to be implemented)
+                      router.push(`/projects/${project.id}/timeline`)
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    View Timeline
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Document Upload Modal */}
+      {project && (
+        <DocumentUpload
+          projectId={project.id}
+          isOpen={uploadModalOpen}
+          onClose={() => setUploadModalOpen(false)}
+          onUploadComplete={(document) => {
+            console.log('Document uploaded:', document)
+            // You can add the document to the store or refresh the documents list here
+          }}
+        />
+      )}
+
+      {/* Document Viewer Modal */}
+      {project && (
+        <DocumentViewer
+          projectId={project.id}
+          isOpen={viewDocumentsOpen}
+          onClose={() => setViewDocumentsOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,7 +29,8 @@ const TRADES: TradeCategory[] = [
 
 export default function NewProjectPage() {
   const router = useRouter()
-  const { createProject, publishProject } = useStore()
+  const { toast } = useToast()
+  const { currentUser, loadProjects } = useStore()
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -52,24 +54,48 @@ export default function NewProjectPage() {
     setSaving(true)
 
     try {
-      const project = createProject({
-        title: formData.title,
-        description: formData.description,
-        location: formData.location,
-        budget: Number(formData.budget),
-        startDate: new Date(formData.startDate),
-        endDate: new Date(formData.endDate),
-        deadline: new Date(formData.deadline),
-        trades: formData.trades,
+      // Create project via API
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          location: formData.location,
+          budgetMin: formData.budget,
+          budgetMax: formData.budget,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          deadline: formData.deadline,
+          createdById: currentUser?.id,
+          status: publish ? 'PUBLISHED' : 'DRAFT',
+        }),
       })
 
-      if (publish) {
-        publishProject(project.id)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create project')
       }
 
-      router.push(`/projects/${project.id}`)
+      // Refresh projects in store
+      await loadProjects()
+
+      toast({
+        title: publish ? "Project Published Successfully!" : "Project Saved as Draft",
+        description: publish ? "Your project is now live and visible to subcontractors." : "Your project has been saved and can be published later.",
+      })
+
+      router.push(`/projects/${data.project.id}`)
     } catch (error) {
       console.error("Failed to create project:", error)
+      toast({
+        title: "Failed to Create Project",
+        description: "There was an error creating your project. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }

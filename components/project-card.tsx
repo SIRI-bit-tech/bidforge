@@ -36,7 +36,14 @@ export function ProjectCard({ project, bidsCount = 0, showActions = true, action
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <DollarSign className="h-4 w-4" />
-          <span>{formatCurrency(project.budget)}</span>
+          <span>
+            {project.budgetMin && project.budgetMax 
+              ? `${formatCurrency(Number(project.budgetMin))} - ${formatCurrency(Number(project.budgetMax))}`
+              : project.budget 
+              ? formatCurrency(Number(project.budget))
+              : 'Budget not specified'
+            }
+          </span>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Calendar className="h-4 w-4" />

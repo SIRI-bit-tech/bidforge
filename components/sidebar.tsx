@@ -4,13 +4,19 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings } from "lucide-react"
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { currentUser } = useStore()
+  const { currentUser, messages } = useStore()
 
   if (!currentUser) return null
+
+  // Count unread messages
+  const unreadCount = messages.filter(msg => 
+    msg.receiverId === currentUser.id && !msg.read
+  ).length
 
   const contractorLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,18 +46,27 @@ export function Sidebar() {
           {links.map((link) => {
             const Icon = link.icon
             const isActive = pathname === link.href || pathname.startsWith(link.href + "/")
+            const showBadge = link.href === "/messages" && unreadCount > 0
 
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative",
                   isActive ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon className="h-5 w-5" />
                 {link.label}
+                {showBadge && (
+                  <Badge 
+                    variant="destructive" 
+                    className="ml-auto h-5 min-w-5 flex items-center justify-center text-xs px-1"
+                  >
+                    {unreadCount}
+                  </Badge>
+                )}
               </Link>
             )
           })}

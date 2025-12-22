@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyPassword } from '@/lib/services/auth'
-import { signJWT } from '@/lib/utils/jwt'
+import { verifyPassword, generateJWT } from '@/lib/services/auth'
 import { db, users } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
@@ -30,12 +29,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log login attempt for security monitoring
-    console.info('Login attempt:', {
-      email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-      timestamp: new Date().toISOString(),
-      ip: rateLimitKey.split(':')[1]
-    })
+
 
     // Find user by email
     const [user] = await db
@@ -90,16 +84,11 @@ export async function POST(request: NextRequest) {
     const tokenPayload = { 
       userId: user.id, 
       role: user.role,
-      companyId: user.companyId 
+      companyId: user.companyId || undefined
     }
-    const token = signJWT(tokenPayload, '30d')
+    const token = generateJWT(tokenPayload)
 
-    console.info('Successful login:', {
-      userId: user.id,
-      email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-      role: user.role,
-      timestamp: new Date().toISOString()
-    })
+
 
     // Create response with user data (no token in body)
     const response = NextResponse.json({

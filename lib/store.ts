@@ -35,12 +35,26 @@ interface AppState {
   register: (email: string, password: string, name: string, role: UserRole) => Promise<{ user: User; needsVerification: boolean }>
   verifyEmail: (email: string, code: string) => Promise<boolean>
   resendVerificationCode: (email: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
+  restoreSession: () => Promise<User | null>
+  checkAuthStatus: () => Promise<boolean>
+
+  // Data loading actions
+  loadUsers: () => Promise<User[]>
+  loadCompanies: () => Promise<Company[]>
+  loadProjects: () => Promise<Project[]>
+  loadSubcontractors: () => Promise<User[]>
 
   // Company actions
   createCompany: (data: Partial<Company>) => Company
   updateCompany: (id: string, data: Partial<Company>) => Company
   getCompany: (id: string) => Company | undefined
+
+  // Subcontractor discovery actions
+  getSubcontractors: () => User[]
+  searchSubcontractors: (query: string, tradeIds?: string[]) => User[]
+  getSubcontractorsByTrade: (tradeId: string) => User[]
+  getSubcontractorProfile: (userId: string) => { user: User; company?: Company } | null
 
   // Project actions
   createProject: (data: Partial<Project>) => Project
@@ -61,7 +75,7 @@ interface AppState {
   getBidsBySubcontractor: (subcontractorId: string) => Bid[]
 
   // Invitation actions
-  inviteSubcontractors: (projectId: string, subcontractorIds: string[]) => Invitation[]
+  inviteSubcontractors: (projectId: string, subcontractorIds: string[]) => Promise<Invitation[]>
   acceptInvitation: (id: string) => Invitation
   declineInvitation: (id: string) => Invitation
   getInvitationsBySubcontractor: (subcontractorId: string) => Invitation[]
@@ -72,9 +86,11 @@ interface AppState {
   getDocumentsByProject: (projectId: string) => Document[]
 
   // Message actions
-  sendMessage: (data: Partial<Message>) => Message
-  getMessagesByProject: (projectId: string) => Message[]
-  markMessageAsRead: (id: string) => void
+  sendMessage: (data: Partial<Message>) => Promise<Message>
+  getMessagesByUser: (userId: string) => Promise<Message[]>
+  getMessagesByProject: (projectId: string) => Promise<Message[]>
+  markMessageAsRead: (id: string) => Promise<void>
+  addMessage: (message: Message) => void
 
   // Notification actions
   createNotification: (data: Partial<Notification>) => Notification
@@ -88,24 +104,12 @@ const generateId = () => Math.random().toString(36).substring(2, 15)
 
 // Seed data for testing - Remove in production
 const seedData = () => {
-  const contractors: User[] = []
-
-  const subcontractors: User[] = []
-
-  const companies: Company[] = []
-
-  const projects: Project[] = []
-
-  const invitations: Invitation[] = []
-
-  const bids: Bid[] = []
-
   return {
-    users: [...contractors, ...subcontractors],
-    companies,
-    projects,
-    bids,
-    invitations,
+    users: [],
+    companies: [],
+    projects: [],
+    bids: [],
+    invitations: [],
     documents: [],
     messages: [],
     notifications: [],
@@ -232,8 +236,154 @@ export const useStore = create<AppState>((set, get) => ({
     return
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      })
+    } catch (error) {
+      console.error('Logout API call failed:', error)
+      // Continue with local logout even if API fails
+    }
+    
     set({ currentUser: null, isAuthenticated: false })
+  },
+
+  restoreSession: async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include', // Include cookies
+      })
+
+      if (!response.ok) {
+        // No valid session
+        set({ currentUser: null, isAuthenticated: false })
+        return null
+      }
+
+      const data = await response.json()
+      const user: User = {
+        ...data.user,
+        createdAt: new Date(data.user.createdAt),
+        updatedAt: new Date(data.user.updatedAt),
+      }
+
+      set({ currentUser: user, isAuthenticated: true })
+      return user
+    } catch (error) {
+      console.error('Session restoration failed:', error)
+      set({ currentUser: null, isAuthenticated: false })
+      return null
+    }
+  },
+
+  checkAuthStatus: async () => {
+    const user = await get().restoreSession()
+    return user !== null
+  },
+
+  // Data loading actions
+  loadUsers: async () => {
+    try {
+      const response = await fetch('/api/users')
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load users')
+      }
+
+      const users = data.users.map((user: any) => ({
+        ...user,
+        createdAt: new Date(user.createdAt),
+        updatedAt: new Date(user.updatedAt),
+      }))
+
+      set({ users })
+      return users
+    } catch (error) {
+      console.error('Failed to load users:', error)
+      return []
+    }
+  },
+
+  loadCompanies: async () => {
+    try {
+      const response = await fetch('/api/companies')
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load companies')
+      }
+
+      const companies = data.companies.map((company: any) => ({
+        ...company,
+        createdAt: new Date(company.createdAt),
+        updatedAt: new Date(company.updatedAt),
+      }))
+
+      set({ companies })
+      return companies
+    } catch (error) {
+      console.error('Failed to load companies:', error)
+      return []
+    }
+  },
+
+  loadProjects: async () => {
+    try {
+      const response = await fetch('/api/projects')
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load projects')
+      }
+
+      const projects = data.projects.map((project: any) => ({
+        ...project,
+        startDate: project.startDate ? new Date(project.startDate) : null,
+        endDate: project.endDate ? new Date(project.endDate) : null,
+        deadline: new Date(project.deadline),
+        createdAt: new Date(project.createdAt),
+        updatedAt: new Date(project.updatedAt),
+      }))
+
+      set({ projects })
+      return projects
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+      return []
+    }
+  },
+
+  loadSubcontractors: async () => {
+    try {
+      const response = await fetch('/api/users?role=SUBCONTRACTOR')
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load subcontractors')
+      }
+
+      const subcontractors = data.users.map((user: any) => ({
+        ...user,
+        createdAt: new Date(user.createdAt),
+        updatedAt: new Date(user.updatedAt),
+      }))
+
+      // Update users array with subcontractors
+      set((state) => ({
+        users: [
+          ...state.users.filter(u => u.role !== 'SUBCONTRACTOR'),
+          ...subcontractors
+        ]
+      }))
+
+      return subcontractors
+    } catch (error) {
+      console.error('Failed to load subcontractors:', error)
+      return []
+    }
   },
 
   // Company actions
@@ -264,6 +414,51 @@ export const useStore = create<AppState>((set, get) => ({
 
   getCompany: (id) => {
     return get().companies.find((c) => c.id === id)
+  },
+
+  // Subcontractor discovery actions
+  getSubcontractors: () => {
+    return get().users.filter((user) => user.role === "SUBCONTRACTOR")
+  },
+
+  searchSubcontractors: (query: string, tradeIds?: string[]) => {
+    const subcontractors = get().getSubcontractors()
+    const companies = get().companies
+    
+    return subcontractors.filter((user) => {
+      const company = companies.find((c) => c.id === user.companyId)
+      
+      // Text search in name, company name, or description
+      const matchesText = query === "" || 
+        user.name.toLowerCase().includes(query.toLowerCase()) ||
+        (company?.name?.toLowerCase().includes(query.toLowerCase())) ||
+        (company?.description?.toLowerCase().includes(query.toLowerCase()))
+      
+      // Trade filter - for now, skip trade filtering if no company trades are loaded
+      const matchesTrades = !tradeIds || tradeIds.length === 0 || 
+        (company?.trades?.some(trade => tradeIds.includes(trade)))
+      
+      return matchesText && matchesTrades
+    })
+  },
+
+  getSubcontractorsByTrade: (tradeId: string) => {
+    const subcontractors = get().getSubcontractors()
+    const companies = get().companies
+    
+    return subcontractors.filter((user) => {
+      const company = companies.find((c) => c.id === user.companyId)
+      return company?.trades.includes(tradeId as any)
+    })
+  },
+
+  getSubcontractorProfile: (userId: string) => {
+    const user = get().users.find((u) => u.id === userId && u.role === "SUBCONTRACTOR")
+    if (!user) return null
+    
+    const company = user.companyId ? get().getCompany(user.companyId) : undefined
+    
+    return { user, company }
   },
 
   // Project actions
@@ -423,35 +618,57 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Invitation actions
-  inviteSubcontractors: (projectId, subcontractorIds) => {
-    const newInvitations = subcontractorIds.map((subId) => {
-      const invitation: Invitation = {
-        id: generateId(),
-        projectId,
-        subcontractorId: subId,
-        status: "PENDING",
-        sentAt: new Date(),
+  inviteSubcontractors: async (projectId, subcontractorIds) => {
+    try {
+      const response = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          subcontractorIds,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send invitations')
       }
 
-      // Create notification
+      // Update local state with new invitations
+      const newInvitations = data.invitations.map((invitation: any) => ({
+        ...invitation,
+        sentAt: new Date(invitation.sentAt),
+        respondedAt: invitation.respondedAt ? new Date(invitation.respondedAt) : undefined,
+      }))
+
+      set((state) => ({ 
+        invitations: [...state.invitations, ...newInvitations] 
+      }))
+
+      // Create notifications for invited subcontractors
       const project = get().getProject(projectId)
       if (project) {
-        get().createNotification({
-          userId: subId,
-          type: "INVITATION",
-          title: "New Bid Invitation",
-          message: `You've been invited to bid on ${project.title}`,
-          read: false,
-          createdAt: new Date(),
-          link: `/invitations`,
+        subcontractorIds.forEach((subId) => {
+          get().createNotification({
+            userId: subId,
+            type: "INVITATION",
+            title: "New Bid Invitation",
+            message: `You've been invited to bid on ${project.title}`,
+            read: false,
+            createdAt: new Date(),
+            link: `/opportunities`,
+          })
         })
       }
 
-      return invitation
-    })
-
-    set((state) => ({ invitations: [...state.invitations, ...newInvitations] }))
-    return newInvitations
+      return newInvitations
+    } catch (error) {
+      console.error('Failed to send invitations:', error)
+      throw error
+    }
   },
 
   acceptInvitation: (id) => {
@@ -505,20 +722,36 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Message actions
-  sendMessage: (data) => {
+  sendMessage: async (data) => {
     const currentUser = get().currentUser
     if (!currentUser) throw new Error("Not authenticated")
 
-    const newMessage: Message = {
-      id: generateId(),
-      projectId: data.projectId || "",
-      bidId: data.bidId,
-      senderId: currentUser.id,
-      receiverId: data.receiverId || "",
-      text: data.text || "",
-      sentAt: new Date(),
-      read: false,
+    const response = await fetch('/api/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId: data.projectId,
+        receiverId: data.receiverId,
+        text: data.text,
+        senderId: currentUser.id,
+        bidId: data.bidId,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to send message')
     }
+
+    // Add message to local state
+    const newMessage: Message = {
+      ...result.message,
+      sentAt: new Date(result.message.sentAt),
+    }
+    
     set((state) => ({ messages: [...state.messages, newMessage] }))
 
     // Create notification
@@ -535,14 +768,66 @@ export const useStore = create<AppState>((set, get) => ({
     return newMessage
   },
 
-  getMessagesByProject: (projectId) => {
-    return get().messages.filter((m) => m.projectId === projectId)
+  getMessagesByUser: async (userId: string) => {
+    const response = await fetch(`/api/messages?userId=${userId}`)
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to fetch messages')
+    }
+
+    const messages = result.messages.map((msg: any) => ({
+      ...msg,
+      sentAt: new Date(msg.sentAt),
+    }))
+
+    // Update local state
+    set({ messages })
+    return messages
   },
 
-  markMessageAsRead: (id) => {
+  getMessagesByProject: async (projectId: string) => {
+    const currentUser = get().currentUser
+    if (!currentUser) throw new Error("Not authenticated")
+
+    const response = await fetch(`/api/messages?userId=${currentUser.id}&projectId=${projectId}`)
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to fetch messages')
+    }
+
+    return result.messages.map((msg: any) => ({
+      ...msg,
+      sentAt: new Date(msg.sentAt),
+    }))
+  },
+
+  markMessageAsRead: async (id: string) => {
+    const response = await fetch(`/api/messages/${id}/read`, {
+      method: 'PATCH',
+    })
+
+    if (!response.ok) {
+      const result = await response.json()
+      throw new Error(result.error || 'Failed to mark message as read')
+    }
+
+    // Update local state
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
     }))
+  },
+
+  addMessage: (message: Message) => {
+    set((state) => {
+      // Check if message already exists to prevent duplicates
+      const messageExists = state.messages.some(m => m.id === message.id)
+      if (messageExists) {
+        return state // Don't add duplicate
+      }
+      return { messages: [...state.messages, message] }
+    })
   },
 
   // Notification actions

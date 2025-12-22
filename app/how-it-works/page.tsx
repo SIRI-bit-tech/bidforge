@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, UserPlus, FileText, Users, Award, CheckCircle } from "lucide-react"
+import { ArrowRight, UserPlus, FileText, Users, Award, CheckCircle, Search, MessageSquare, Wifi } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
 export default function HowItWorksPage() {
@@ -14,8 +14,8 @@ export default function HowItWorksPage() {
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">How BidForge Works</h1>
             <p className="text-xl text-muted-foreground">
-              A simple, streamlined process that connects contractors with qualified subcontractors for better project
-              outcomes.
+              A complete platform that connects contractors with qualified subcontractors through intelligent discovery, 
+              real-time communication, and streamlined bidding.
             </p>
           </div>
         </div>
@@ -26,9 +26,9 @@ export default function HowItWorksPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold text-foreground mb-4">Simple. Efficient. Transparent.</h2>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Simple. Efficient. Connected.</h2>
               <p className="text-lg text-muted-foreground">
-                From project posting to bid award, our platform streamlines every step of the bidding process.
+                From subcontractor discovery to project completion, our platform streamlines every step with real-time communication.
               </p>
             </div>
 
@@ -36,27 +36,37 @@ export default function HowItWorksPage() {
             <div className="mb-20">
               <div className="text-center mb-12">
                 <h3 className="text-2xl font-bold text-foreground mb-2">For General Contractors</h3>
-                <p className="text-muted-foreground">Post projects and find qualified subcontractors</p>
+                <p className="text-muted-foreground">Discover, connect, and collaborate with qualified subcontractors</p>
               </div>
 
-              <div className="grid md:grid-cols-4 gap-8">
+              <div className="grid md:grid-cols-5 gap-6">
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-8 h-8 text-accent" />
                   </div>
                   <h4 className="font-semibold text-foreground mb-2">1. Post Your Project</h4>
                   <p className="text-sm text-muted-foreground">
-                    Create detailed project listings with specifications, timelines, and requirements.
+                    Create detailed project listings with specifications, timelines, and trade requirements.
                   </p>
                 </div>
 
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-accent" />
+                    <Search className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">2. Invite Subcontractors</h4>
+                  <h4 className="font-semibold text-foreground mb-2">2. Discover Subcontractors</h4>
                   <p className="text-sm text-muted-foreground">
-                    Browse our network and invite qualified subcontractors to bid on your project.
+                    Browse our searchable directory, filter by trade specialties, and view detailed company profiles.
+                  </p>
+                </div>
+
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare className="w-8 h-8 text-accent" />
+                  </div>
+                  <h4 className="font-semibold text-foreground mb-2">3. Communicate & Invite</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Chat in real-time with potential subcontractors and send project invitations to qualified candidates.
                   </p>
                 </div>
 
@@ -64,9 +74,9 @@ export default function HowItWorksPage() {
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">3. Review Bids</h4>
+                  <h4 className="font-semibold text-foreground mb-2">4. Review Bids</h4>
                   <p className="text-sm text-muted-foreground">
-                    Compare detailed bids with line items, alternates, and subcontractor profiles.
+                    Compare detailed bids with line items, alternates, and continue discussions via instant messaging.
                   </p>
                 </div>
 
@@ -74,9 +84,9 @@ export default function HowItWorksPage() {
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <Award className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">4. Award Contract</h4>
+                  <h4 className="font-semibold text-foreground mb-2">5. Award & Manage</h4>
                   <p className="text-sm text-muted-foreground">
-                    Select the best bid and award the contract with automatic notifications.
+                    Select the best bid, award the contract, and manage the project with ongoing communication.
                   </p>
                 </div>
               </div>
@@ -86,27 +96,37 @@ export default function HowItWorksPage() {
             <div>
               <div className="text-center mb-12">
                 <h3 className="text-2xl font-bold text-foreground mb-2">For Subcontractors</h3>
-                <p className="text-muted-foreground">Discover opportunities and submit competitive bids</p>
+                <p className="text-muted-foreground">Build your profile, connect with contractors, and win more projects</p>
               </div>
 
-              <div className="grid md:grid-cols-4 gap-8">
+              <div className="grid md:grid-cols-5 gap-6">
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <UserPlus className="w-8 h-8 text-accent" />
                   </div>
                   <h4 className="font-semibold text-foreground mb-2">1. Create Profile</h4>
                   <p className="text-sm text-muted-foreground">
-                    Build your company profile with certifications, past work, and trade specializations.
+                    Build your company profile with certifications, trade specializations, and portfolio.
                   </p>
                 </div>
 
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-accent" />
+                    <Users className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">2. Receive Invitations</h4>
+                  <h4 className="font-semibold text-foreground mb-2">2. Get Discovered</h4>
                   <p className="text-sm text-muted-foreground">
-                    Get invited to bid on projects that match your expertise and capacity.
+                    Appear in contractor searches based on your trades, location, and expertise.
+                  </p>
+                </div>
+
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare className="w-8 h-8 text-accent" />
+                  </div>
+                  <h4 className="font-semibold text-foreground mb-2">3. Connect & Discuss</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Receive invitations, chat with contractors about project details, and ask clarifying questions.
                   </p>
                 </div>
 
@@ -114,7 +134,7 @@ export default function HowItWorksPage() {
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">3. Submit Detailed Bids</h4>
+                  <h4 className="font-semibold text-foreground mb-2">4. Submit Bids</h4>
                   <p className="text-sm text-muted-foreground">
                     Create comprehensive bids with line items, alternates, and project timelines.
                   </p>
@@ -124,9 +144,9 @@ export default function HowItWorksPage() {
                   <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                     <CheckCircle className="w-8 h-8 text-accent" />
                   </div>
-                  <h4 className="font-semibold text-foreground mb-2">4. Win Projects</h4>
+                  <h4 className="font-semibold text-foreground mb-2">5. Win & Execute</h4>
                   <p className="text-sm text-muted-foreground">
-                    Get notified when your bid is selected and start working on the project.
+                    Get instant notifications when you win, and coordinate project execution through real-time chat.
                   </p>
                 </div>
               </div>
@@ -142,37 +162,74 @@ export default function HowItWorksPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold text-foreground mb-4">Why Choose BidForge?</h2>
               <p className="text-lg text-muted-foreground">
-                Built specifically for the construction industry with features that matter
+                Built specifically for the construction industry with modern features that matter
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-8">
               <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-3">Detailed Bid Management</h3>
+                <div className="flex items-center gap-3 mb-3">
+                  <Search className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Smart Subcontractor Discovery</h3>
+                </div>
+                <p className="text-muted-foreground">
+                  Browse a searchable directory of qualified subcontractors. Filter by trade specialties, location, 
+                  and certifications to find the perfect match for your project.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Wifi className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Real-Time Communication</h3>
+                </div>
+                <p className="text-muted-foreground">
+                  Instant messaging with Socket.IO technology. Chat in real-time, get read receipts, 
+                  and never miss important project discussions.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <FileText className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Detailed Bid Management</h3>
+                </div>
                 <p className="text-muted-foreground">
                   Create comprehensive bids with line items, alternates, and detailed breakdowns for complete
-                  transparency.
+                  transparency and accurate project costing.
                 </p>
               </div>
 
               <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-3">Qualified Network</h3>
+                <div className="flex items-center gap-3 mb-3">
+                  <Users className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Verified Professional Network</h3>
+                </div>
                 <p className="text-muted-foreground">
-                  Connect with pre-vetted contractors and subcontractors with verified credentials and track records.
+                  Connect with pre-vetted contractors and subcontractors with verified credentials, 
+                  certifications, and proven track records.
                 </p>
               </div>
 
               <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-3">Real-time Communication</h3>
+                <div className="flex items-center gap-3 mb-3">
+                  <MessageSquare className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Project-Based Messaging</h3>
+                </div>
                 <p className="text-muted-foreground">
-                  Stay connected throughout the bidding process with integrated messaging and notifications.
+                  Organized conversations by project with message history, notifications, 
+                  and seamless coordination between all stakeholders.
                 </p>
               </div>
 
               <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-3">Document Management</h3>
+                <div className="flex items-center gap-3 mb-3">
+                  <Award className="w-6 h-6 text-accent" />
+                  <h3 className="text-lg font-semibold text-foreground">Secure Document Management</h3>
+                </div>
                 <p className="text-muted-foreground">
-                  Securely share and manage project documents, blueprints, and specifications in one place.
+                  Securely share and manage project documents, blueprints, and specifications 
+                  with version control and access management.
                 </p>
               </div>
             </div>

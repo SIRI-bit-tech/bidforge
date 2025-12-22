@@ -1,78 +1,236 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useStore } from "@/lib/store"
-import { ProjectCard } from "@/components/project-card"
-import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
-import { Inbox, Check, X } from "lucide-react"
-import { formatRelativeTime } from "@/lib/utils/format"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/empty-state"
+import { formatDate, formatTimeUntil } from "@/lib/utils/format"
+import { Mail, Calendar, MapPin, DollarSign, Clock, CheckCircle, XCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function InvitationsPage() {
   const router = useRouter()
-  const { currentUser, getInvitationsBySubcontractor, projects, acceptInvitation, declineInvitation } = useStore()
+  const { 
+    currentUser, 
+    getInvitationsBySubcontractor, 
+    acceptInvitation, 
+    declineInvitation,
+    projects,
+    loadProjects
+  } = useStore()
+  
+  const [loading, setLoading] = useState(true)
+  const [invitations, setInvitations] = useState<any[]>([])
 
-  if (!currentUser) return null
+  useEffect(() => {
+    const loadData = async () => {
+      if (!currentUser) return
+      
+      try {
+        // Load projects first
+        await loadProjects()
+        
+        // Load invitations from API
+        const response = await fetch(`/api/invitations?userId=${currentUser.id}`)
+        const data = await response.json()
+        
+        if (response.ok) {
+          setInvitations(data.invitations)
+        }
+      } catch (error) {
+        console.error('Failed to load invitations:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const invitations = getInvitationsBySubcontractor(currentUser.id)
-  const pendingInvitations = invitations.filter((inv) => inv.status === "PENDING")
+    loadData()
+  }, [currentUser, loadProjects])
+
+  const handleAcceptInvitation = async (invitationId: string) => {
+    try {
+      acceptInvitation(invitationId)
+      // Update local state
+      setInvitations(prev => 
+        prev.map(inv => 
+          inv.id === invitationId 
+            ? { ...inv, status: 'ACCEPTED', respondedAt: new Date() }
+            : inv
+        )
+      )
+    } catch (error) {
+      console.error('Failed to accept invitation:', error)
+    }
+  }
+
+  const handleDeclineInvitation = async (invitationId: string) => {
+    try {
+      declineInvitation(invitationId)
+      // Update local state
+      setInvitations(prev => 
+        prev.map(inv => 
+          inv.id === invitationId 
+            ? { ...inv, status: 'DECLINED', respondedAt: new Date() }
+            : inv
+        )
+      )
+    } catch (error) {
+      console.error('Failed to decline invitation:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading invitations...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser || currentUser.role !== 'SUBCONTRACTOR') {
+    return (
+      <EmptyState
+        icon={Mail}
+        title="Access Denied"
+        description="Only subcontractors can view invitations"
+      />
+    )
+  }
 
   return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">Bid Invitations</h1>
-        <p className="text-muted-foreground mt-1">Review and respond to project invitations</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Project Invitations</h1>
+        <p className="text-muted-foreground">
+          Review and respond to project invitations from contractors
+        </p>
       </div>
 
-      {pendingInvitations.length > 0 ? (
+      {invitations.length > 0 ? (
         <div className="space-y-6">
-          {pendingInvitations.map((invitation) => {
-            const project = projects.find((p) => p.id === invitation.projectId)
+          {invitations.map((invitation) => {
+            const project = projects.find(p => p.id === invitation.projectId)
             if (!project) return null
 
-            return (
-              <div key={invitation.id} className="rounded-lg border border-border bg-card p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">{project.title}</h3>
-                    <p className="text-sm text-muted-foreground">Invited {formatRelativeTime(invitation.sentAt)}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        declineInvitation(invitation.id)
-                        router.refresh()
-                      }}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Decline
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="bg-accent hover:bg-accent-hover text-white"
-                      onClick={() => {
-                        acceptInvitation(invitation.id)
-                        router.push(`/projects/${project.id}`)
-                      }}
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Accept & View
-                    </Button>
-                  </div>
-                </div>
+            const isExpired = new Date(project.deadline) < new Date()
+            const timeRemaining = formatTimeUntil(project.deadline)
 
-                <ProjectCard project={project} showActions={false} />
-              </div>
+            return (
+              <Card key={invitation.id} className="hover:shadow-md transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-xl">{project.title}</CardTitle>
+                      <CardDescription className="mt-1">
+                        Invited on {formatDate(invitation.sentAt)}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge 
+                        variant={
+                          invitation.status === 'PENDING' ? 'default' :
+                          invitation.status === 'ACCEPTED' ? 'secondary' :
+                          'outline'
+                        }
+                      >
+                        {invitation.status}
+                      </Badge>
+                      {isExpired && (
+                        <Badge variant="destructive">Expired</Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground">{project.description}</p>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{project.location}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        Budget: {project.budgetMin && project.budgetMax 
+                          ? `$${project.budgetMin} - $${project.budgetMax}`
+                          : 'Not specified'
+                        }
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        {project.startDate && project.endDate 
+                          ? `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
+                          : 'Dates not specified'
+                        }
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className={isExpired ? "text-destructive" : "text-warning"}>
+                        Deadline: {timeRemaining}
+                      </span>
+                    </div>
+                  </div>
+
+                  {invitation.status === 'PENDING' && !isExpired && (
+                    <div className="flex gap-3 pt-4">
+                      <Button
+                        onClick={() => handleDeclineInvitation(invitation.id)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Decline
+                      </Button>
+                      <Button
+                        onClick={() => handleAcceptInvitation(invitation.id)}
+                        className="flex-1 bg-accent hover:bg-accent-hover text-white"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Accept & View Project
+                      </Button>
+                    </div>
+                  )}
+
+                  {invitation.status === 'ACCEPTED' && (
+                    <div className="pt-4">
+                      <Button
+                        onClick={() => router.push(`/projects/${project.id}`)}
+                        className="w-full bg-accent hover:bg-accent-hover text-white"
+                      >
+                        View Project Details
+                      </Button>
+                    </div>
+                  )}
+
+                  {invitation.respondedAt && (
+                    <p className="text-xs text-muted-foreground pt-2">
+                      Responded on {formatDate(invitation.respondedAt)}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             )
           })}
         </div>
       ) : (
         <EmptyState
-          icon={Inbox}
-          title="No pending invitations"
-          description="You'll see new project invitations here when contractors invite you to bid"
+          icon={Mail}
+          title="No invitations yet"
+          description="You haven't received any project invitations. Check back later or browse available opportunities."
+          action={{
+            label: "Browse Opportunities",
+            onClick: () => router.push("/opportunities"),
+          }}
         />
       )}
     </div>

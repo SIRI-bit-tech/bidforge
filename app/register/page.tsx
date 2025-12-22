@@ -59,7 +59,9 @@ export default function RegisterPage() {
       const result = await register(formData.email, formData.password, formData.name, formData.role)
       
       if (result.needsVerification) {
-        router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`)
+        // Store email in session storage instead of URL
+        sessionStorage.setItem('pendingVerificationEmail', formData.email)
+        router.push('/verify-email')
       } else {
         router.push("/onboarding")
       }

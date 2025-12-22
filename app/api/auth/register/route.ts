@@ -134,12 +134,7 @@ export async function POST(request: NextRequest) {
         verificationCodeId = createdCode.id
       })
 
-      console.info('User created successfully:', {
-        userId: newUser.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        role: newUser.role,
-        timestamp: new Date().toISOString()
-      })
+
 
     } catch (dbError) {
       console.error('Database error during user creation:', dbError)
@@ -152,11 +147,7 @@ export async function POST(request: NextRequest) {
     // Send verification email (after successful DB creation)
     try {
       await sendVerificationEmail(email, verificationData.code, name)
-      console.info('Verification email sent successfully:', {
-        userId: newUser.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+
     } catch (emailError) {
       console.error('Failed to send verification email:', {
         error: emailError,

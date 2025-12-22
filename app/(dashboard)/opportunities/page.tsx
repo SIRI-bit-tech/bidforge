@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { ProjectCard } from "@/components/project-card"
 import { EmptyState } from "@/components/empty-state"
@@ -9,11 +9,59 @@ import { Folder, Search } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function OpportunitiesPage() {
-  const { projects, currentUser, getBidsByProject } = useStore()
+  const { projects, currentUser, getBidsByProject, loadProjects } = useStore()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("published")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load projects on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setError(null)
+        console.log('Loading projects...')
+        const projects = await loadProjects()
+        console.log('Loaded projects:', projects.length)
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+        setError('Failed to load projects. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [loadProjects])
 
   if (!currentUser) return null
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading opportunities...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const availableProjects = projects.filter((p) => {
     const matchesStatus = statusFilter === "all" || p.status.toLowerCase() === statusFilter

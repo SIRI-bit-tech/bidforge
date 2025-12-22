@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,8 +11,7 @@ import { AlertCircle, CheckCircle, Mail } from "lucide-react"
 
 export default function VerifyEmailPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const email = searchParams.get("email")
+  const [email, setEmail] = useState<string | null>(null)
   
   const { verifyEmail, resendVerificationCode } = useStore()
   
@@ -24,10 +23,15 @@ export default function VerifyEmailPage() {
   const [resending, setResending] = useState(false)
 
   useEffect(() => {
-    if (!email) {
+    // Get email from session storage instead of URL
+    const pendingEmail = sessionStorage.getItem('pendingVerificationEmail')
+    if (pendingEmail) {
+      setEmail(pendingEmail)
+    } else {
+      // If no pending email, redirect to register
       router.push("/register")
     }
-  }, [email, router])
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,6 +44,9 @@ export default function VerifyEmailPage() {
     try {
       await verifyEmail(email, code)
       setSuccess(true)
+      
+      // Clear the pending email from session storage
+      sessionStorage.removeItem('pendingVerificationEmail')
       
       // Redirect to onboarding after 2 seconds
       setTimeout(() => {

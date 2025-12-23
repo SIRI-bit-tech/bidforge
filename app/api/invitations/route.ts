@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, invitations, projects, users } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
@@ -66,6 +66,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Short-circuit if no subcontractor IDs provided
+    if (subcontractorIds.length === 0) {
+      return NextResponse.json(
+        { error: 'No subcontractors specified' },
+        { status: 400 }
+      )
+    }
+
     // Verify that all provided IDs are valid subcontractors
     const validSubcontractors = await db
       .select({ id: users.id })
@@ -73,15 +81,12 @@ export async function POST(request: NextRequest) {
       .where(
         and(
           eq(users.role, 'SUBCONTRACTOR'),
-          // Check if user ID is in the provided list
-          // Note: This is a simplified check - in production you might want to use an IN clause
+          inArray(users.id, subcontractorIds)
         )
       )
 
-    // Filter to only include valid subcontractor IDs that exist in the database
-    const validSubcontractorIds = subcontractorIds.filter(id => 
-      validSubcontractors.some(sub => sub.id === id)
-    )
+    // Extract valid subcontractor IDs from the database results
+    const validSubcontractorIds = validSubcontractors.map(sub => sub.id)
 
     if (validSubcontractorIds.length === 0) {
       return NextResponse.json(

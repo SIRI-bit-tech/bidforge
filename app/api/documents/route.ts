@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, documents, projects, bids } from '@/lib/db'
-import { eq, desc, or } from 'drizzle-orm'
+import { eq, desc, and } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
     const [projectAccess] = await db
       .select({
         projectId: projects.id,
-        isOwner: eq(projects.createdById, payload.userId),
-        hasBid: bids.id,
+        createdById: projects.createdById,
+        bidId: bids.id,
       })
       .from(projects)
       .leftJoin(bids, eq(bids.projectId, projects.id))
@@ -59,16 +59,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has access (is owner OR has submitted a bid)
-    const hasAccess = projectAccess.isOwner || 
-      await db
+    const isOwner = projectAccess.createdById === payload.userId
+    
+    let hasAccess = isOwner
+    
+    if (!hasAccess) {
+      // Check if user has submitted a bid to this project
+      const [bidAccess] = await db
         .select({ id: bids.id })
         .from(bids)
         .where(
-          eq(bids.projectId, projectId) && 
-          eq(bids.subcontractorId, payload.userId)
+          and(
+            eq(bids.projectId, projectId),
+            eq(bids.subcontractorId, payload.userId)
+          )
         )
         .limit(1)
-        .then(result => result.length > 0)
+      
+      hasAccess = !!bidAccess
+    }
 
     if (!hasAccess) {
       console.warn(`User ${payload.userId} attempted unauthorized document upload to project ${projectId}`)
@@ -163,8 +172,10 @@ export async function GET(request: NextRequest) {
         .select({ id: bids.id })
         .from(bids)
         .where(
-          eq(bids.projectId, projectId) && 
-          eq(bids.subcontractorId, payload.userId)
+          and(
+            eq(bids.projectId, projectId),
+            eq(bids.subcontractorId, payload.userId)
+          )
         )
         .limit(1)
       
@@ -174,8 +185,8 @@ export async function GET(request: NextRequest) {
     if (!hasAccess) {
       console.warn(`User ${payload.userId} attempted unauthorized document access to project ${projectId}`)
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Access denied. You must be the project owner or have submitted a bid to access documents.' },
+        { status: 403 }
       )
     }
 

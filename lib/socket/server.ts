@@ -13,13 +13,6 @@ export type SocketServer = NextApiResponse & {
   }
 }
 
-interface AuthenticatedSocket extends Socket {
-  userId?: string
-  role?: string
-  companyId?: string
-  violationCount?: number
-}
-
 // Helper function to authenticate socket connection
 const authenticateSocket = async (socket: Socket, token: string): Promise<boolean> => {
   try {
@@ -197,10 +190,10 @@ export const initSocket = (res: SocketServer) => {
           return
         }
 
-        const { messageId, senderId } = data
+        const { messageId } = data
 
-        if (!messageId || !senderId) {
-          handleViolation(socket, 'Invalid message read data')
+        if (!messageId) {
+          handleViolation(socket, 'Invalid message read data - messageId required')
           return
         }
 
@@ -228,8 +221,8 @@ export const initSocket = (res: SocketServer) => {
             return
           }
 
-          // Notify the sender
-          socket.to(`user:${senderId}`).emit('message-read', {
+          // Notify the sender using the database-validated senderId
+          socket.to(`user:${message.senderId}`).emit('message-read', {
             messageId,
             readBy: socketAny.userId
           })

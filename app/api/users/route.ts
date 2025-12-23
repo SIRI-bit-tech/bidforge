@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, users, companies } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import { db, users } from '@/lib/db'
+import { eq, and, count } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function GET(request: NextRequest) {
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(0, parseInt(searchParams.get('offset') || '0')) // Default 0, min 0
 
     // Build the base query with selected fields (no sensitive data leakage)
-    let baseQuery = db
+    const baseQueryBuilder = db
       .select({
         id: users.id,
         email: users.email,
@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
         updatedAt: users.updatedAt,
       })
       .from(users)
+
+    // Build where conditions based on authorization and filters
+    const mainWhereConditions = []
 
     // 2) Authorization - perform role-based access control
     if (payload.role === 'ADMIN') {
@@ -61,54 +64,41 @@ export async function GET(request: NextRequest) {
       }
 
       // Filter to only users in the same company
-      baseQuery = baseQuery.where(eq(users.companyId, payload.companyId))
+      mainWhereConditions.push(eq(users.companyId, payload.companyId))
       console.log(`User ${payload.userId} accessing company ${payload.companyId} users`)
     }
 
     // 4) Apply role filter if specified (keeping existing functionality)
     if (role && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role)) {
-      if (payload.role === 'ADMIN') {
-        // Admin can filter by any role
-        baseQuery = baseQuery.where(eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR'))
-      } else {
-        // Non-admin: apply both company and role filters
-        baseQuery = baseQuery.where(
-          and(
-            eq(users.companyId, payload.companyId!),
-            eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR')
-          )
-        )
-      }
+      mainWhereConditions.push(eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR'))
     }
 
     // Apply pagination
-    const result = await baseQuery
-      .limit(limit)
-      .offset(offset)
+    const result = mainWhereConditions.length > 0 
+      ? await baseQueryBuilder.where(and(...mainWhereConditions)).limit(limit).offset(offset)
+      : await baseQueryBuilder.limit(limit).offset(offset)
 
     // Get total count for pagination metadata (with same authorization filters)
-    let countQuery = db
-      .select({ count: users.id })
+    let countQueryBuilder = db
+      .select({ count: count() })
       .from(users)
 
+    // Apply the same filters as the main query
+    const countWhereConditions = []
+    
     if (payload.role !== 'ADMIN') {
-      countQuery = countQuery.where(eq(users.companyId, payload.companyId!))
+      countWhereConditions.push(eq(users.companyId, payload.companyId!))
     }
 
     if (role && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role)) {
-      if (payload.role === 'ADMIN') {
-        countQuery = countQuery.where(eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR'))
-      } else {
-        countQuery = countQuery.where(
-          and(
-            eq(users.companyId, payload.companyId!),
-            eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR')
-          )
-        )
-      }
+      countWhereConditions.push(eq(users.role, role as 'CONTRACTOR' | 'SUBCONTRACTOR'))
     }
 
-    const [{ count: totalCount }] = await countQuery
+    const countResult = countWhereConditions.length > 0 
+      ? await countQueryBuilder.where(and(...countWhereConditions))
+      : await countQueryBuilder
+
+    const totalCount = Number(countResult[0].count)
     const totalPages = Math.ceil(totalCount / limit)
 
     // 5) Return response with proper HTTP status codes and pagination metadata

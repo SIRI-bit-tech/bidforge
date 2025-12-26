@@ -77,8 +77,8 @@ interface AppState {
 
   // Invitation actions
   inviteSubcontractors: (projectId: string, subcontractorIds: string[]) => Promise<Invitation[]>
-  acceptInvitation: (id: string) => Invitation
-  declineInvitation: (id: string) => Invitation
+  acceptInvitation: (id: string) => Promise<Invitation>
+  declineInvitation: (id: string) => Promise<Invitation>
   getInvitationsBySubcontractor: (subcontractorId: string) => Invitation[]
 
   // Document actions
@@ -95,6 +95,7 @@ interface AppState {
 
   // Notification actions
   createNotification: (data: Partial<Notification>) => Notification
+  loadNotifications: () => Promise<Notification[]>
   getNotificationsByUser: (userId: string) => Notification[]
   markNotificationAsRead: (id: string) => void
   markAllNotificationsAsRead: (userId: string) => void
@@ -717,22 +718,56 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  acceptInvitation: (id) => {
-    set((state) => ({
-      invitations: state.invitations.map((inv) =>
-        inv.id === id ? { ...inv, status: "ACCEPTED" as InvitationStatus, respondedAt: new Date() } : inv,
-      ),
-    }))
-    return get().invitations.find((inv) => inv.id === id)!
+  acceptInvitation: async (id) => {
+    try {
+      const response = await fetch(`/api/invitations/${id}/accept`, {
+        method: 'PATCH',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to accept invitation')
+      }
+
+      // Update local state
+      set((state) => ({
+        invitations: state.invitations.map((inv) =>
+          inv.id === id ? { ...inv, status: "ACCEPTED" as InvitationStatus, respondedAt: new Date() } : inv,
+        ),
+      }))
+
+      return get().invitations.find((inv) => inv.id === id)!
+    } catch (error) {
+      console.error('Failed to accept invitation:', error)
+      throw error
+    }
   },
 
-  declineInvitation: (id) => {
-    set((state) => ({
-      invitations: state.invitations.map((inv) =>
-        inv.id === id ? { ...inv, status: "DECLINED" as InvitationStatus, respondedAt: new Date() } : inv,
-      ),
-    }))
-    return get().invitations.find((inv) => inv.id === id)!
+  declineInvitation: async (id) => {
+    try {
+      const response = await fetch(`/api/invitations/${id}/decline`, {
+        method: 'PATCH',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to decline invitation')
+      }
+
+      // Update local state
+      set((state) => ({
+        invitations: state.invitations.map((inv) =>
+          inv.id === id ? { ...inv, status: "DECLINED" as InvitationStatus, respondedAt: new Date() } : inv,
+        ),
+      }))
+
+      return get().invitations.find((inv) => inv.id === id)!
+    } catch (error) {
+      console.error('Failed to decline invitation:', error)
+      throw error
+    }
   },
 
   getInvitationsBySubcontractor: (subcontractorId) => {
@@ -906,8 +941,30 @@ export const useStore = create<AppState>((set, get) => ({
       createdAt: new Date(),
       link: data.link,
     }
-    set((state) => ({ notifications: [...state.notifications, newNotification] }))
+    set((state) => ({ notifications: [newNotification, ...state.notifications] }))
     return newNotification
+  },
+
+  loadNotifications: async () => {
+    try {
+      const response = await fetch('/api/notifications')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load notifications')
+      }
+
+      const notifications = result.notifications.map((notification: any) => ({
+        ...notification,
+        createdAt: new Date(notification.createdAt),
+      }))
+
+      set({ notifications })
+      return notifications
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
+      return []
+    }
   },
 
   getNotificationsByUser: (userId) => {
@@ -917,14 +974,34 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   markNotificationAsRead: (id) => {
+    // Update local state immediately
     set((state) => ({
       notifications: state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
     }))
+    
+    // Also update on server
+    fetch(`/api/notifications/${id}/read`, {
+      method: 'PATCH',
+    }).catch(error => {
+      console.error('Failed to mark notification as read on server:', error)
+    })
   },
 
   markAllNotificationsAsRead: (userId) => {
+    // Update local state immediately
     set((state) => ({
       notifications: state.notifications.map((n) => (n.userId === userId ? { ...n, read: true } : n)),
     }))
+    
+    // Also update on server
+    fetch(`/api/notifications/mark-all-read`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId }),
+    }).catch(error => {
+      console.error('Failed to mark all notifications as read on server:', error)
+    })
   },
 }))

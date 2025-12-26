@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
-import { Bell, LogOut, Menu, User } from "lucide-react"
+import { LogOut, Menu, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,16 +12,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useState } from "react"
 
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { currentUser, isAuthenticated, logout, getNotificationsByUser } = useStore()
+  const { currentUser, isAuthenticated, logout } = useStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  const notifications = currentUser ? getNotificationsByUser(currentUser.id) : []
-  const unreadCount = notifications.filter((n) => !n.read).length
 
   const handleLogout = () => {
     logout()
@@ -68,14 +66,7 @@ export function Navbar() {
             {isAuthenticated && currentUser ? (
               <>
                 {/* Notifications */}
-                <Button variant="ghost" size="icon" className="relative" onClick={() => router.push("/notifications")}>
-                  <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
-                      {unreadCount}
-                    </span>
-                  )}
-                </Button>
+                <NotificationsDropdown />
 
                 {/* User menu */}
                 <DropdownMenu>

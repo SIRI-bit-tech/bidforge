@@ -23,6 +23,22 @@ export default function InvitationsPage() {
   
   const [loading, setLoading] = useState(true)
   const [invitations, setInvitations] = useState<any[]>([])
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const loadInvitations = async () => {
+    if (!currentUser) return
+    
+    try {
+      const response = await fetch(`/api/invitations?userId=${currentUser.id}`)
+      const data = await response.json()
+      
+      if (response.ok) {
+        setInvitations(data.invitations)
+      }
+    } catch (error) {
+      console.error('Failed to load invitations:', error)
+    }
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -33,12 +49,7 @@ export default function InvitationsPage() {
         await loadProjects()
         
         // Load invitations from API
-        const response = await fetch(`/api/invitations?userId=${currentUser.id}`)
-        const data = await response.json()
-        
-        if (response.ok) {
-          setInvitations(data.invitations)
-        }
+        await loadInvitations()
       } catch (error) {
         console.error('Failed to load invitations:', error)
       } finally {
@@ -50,34 +61,32 @@ export default function InvitationsPage() {
   }, [currentUser, loadProjects])
 
   const handleAcceptInvitation = async (invitationId: string) => {
+    if (!currentUser) return
+    
+    setActionLoading(invitationId)
     try {
-      acceptInvitation(invitationId)
-      // Update local state
-      setInvitations(prev => 
-        prev.map(inv => 
-          inv.id === invitationId 
-            ? { ...inv, status: 'ACCEPTED', respondedAt: new Date() }
-            : inv
-        )
-      )
+      await acceptInvitation(invitationId)
+      // Reload invitations to get updated data from server
+      await loadInvitations()
     } catch (error) {
       console.error('Failed to accept invitation:', error)
+    } finally {
+      setActionLoading(null)
     }
   }
 
   const handleDeclineInvitation = async (invitationId: string) => {
+    if (!currentUser) return
+    
+    setActionLoading(invitationId)
     try {
-      declineInvitation(invitationId)
-      // Update local state
-      setInvitations(prev => 
-        prev.map(inv => 
-          inv.id === invitationId 
-            ? { ...inv, status: 'DECLINED', respondedAt: new Date() }
-            : inv
-        )
-      )
+      await declineInvitation(invitationId)
+      // Reload invitations to get updated data from server
+      await loadInvitations()
     } catch (error) {
       console.error('Failed to decline invitation:', error)
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -187,16 +196,18 @@ export default function InvitationsPage() {
                         onClick={() => handleDeclineInvitation(invitation.id)}
                         variant="outline"
                         className="flex-1"
+                        disabled={actionLoading === invitation.id}
                       >
                         <XCircle className="h-4 w-4 mr-2" />
-                        Decline
+                        {actionLoading === invitation.id ? 'Declining...' : 'Decline'}
                       </Button>
                       <Button
                         onClick={() => handleAcceptInvitation(invitation.id)}
                         className="flex-1 bg-accent hover:bg-accent-hover text-white"
+                        disabled={actionLoading === invitation.id}
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Accept & View Project
+                        {actionLoading === invitation.id ? 'Accepting...' : 'Accept & View Project'}
                       </Button>
                     </div>
                   )}

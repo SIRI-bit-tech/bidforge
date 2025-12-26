@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, bids, projects } from '@/lib/db'
+import { db, bids, projects, notifications } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
+import { broadcastNotification } from '@/lib/socket/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,8 +49,10 @@ export async function POST(request: NextRequest) {
     const [project] = await db
       .select({
         id: projects.id,
+        title: projects.title,
         status: projects.status,
         deadline: projects.deadline,
+        createdById: projects.createdById,
       })
       .from(projects)
       .where(eq(projects.id, projectId))
@@ -110,6 +113,28 @@ export async function POST(request: NextRequest) {
       .returning()
 
     console.log(`Bid submitted successfully: ${newBid.id} by user ${payload.userId} for project ${projectId}`)
+
+    // Create notification for project owner (contractor)
+    try {
+      const [notification] = await db.insert(notifications).values({
+        userId: project.createdById,
+        type: 'BID_SUBMITTED',
+        title: 'New Bid Received',
+        message: `A new bid has been submitted for "${project.title}"`,
+        link: `/projects/${projectId}/bids/${newBid.id}`,
+        read: false,
+        createdAt: new Date(),
+      }).returning()
+
+      // Broadcast notification via WebSocket for real-time updates
+      // Add a small delay to ensure the notification is saved before broadcasting
+      setTimeout(() => {
+        broadcastNotification(project.createdById, notification)
+      }, 100)
+    } catch (notificationError) {
+      console.error('Failed to create notification for project owner:', notificationError)
+      // Continue even if notification fails
+    }
 
     return NextResponse.json({
       success: true,

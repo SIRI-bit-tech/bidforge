@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, invitations, projects, users } from '@/lib/db'
+import { db, invitations, projects, users, notifications } from '@/lib/db'
 import { eq, and, inArray } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
+import { broadcastNotification } from '@/lib/socket/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -127,8 +128,28 @@ export async function POST(request: NextRequest) {
 
     console.log(`User ${payload.userId} successfully sent ${newInvitations.length} invitation(s) for project ${projectId}`)
 
-    // TODO: Send email notifications to subcontractors
-    // This would integrate with your email service
+    // Create notifications for invited subcontractors
+    for (const subcontractorId of newSubcontractorIds) {
+      try {
+        const [notification] = await db.insert(notifications).values({
+          userId: subcontractorId,
+          type: 'INVITATION',
+          title: 'New Project Invitation',
+          message: `You've been invited to bid on "${project.title}"`,
+          link: `/opportunities`,
+          read: false,
+          createdAt: new Date(),
+        }).returning()
+
+        // Broadcast notification via WebSocket for real-time updates
+        setTimeout(() => {
+          broadcastNotification(subcontractorId, notification)
+        }, 100)
+      } catch (notificationError) {
+        console.error('Failed to create notification for subcontractor:', subcontractorId, notificationError)
+        // Continue with other notifications even if one fails
+      }
+    }
     
     return NextResponse.json({
       success: true,

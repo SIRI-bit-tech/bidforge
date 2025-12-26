@@ -2,12 +2,15 @@ import { NextApiRequest } from 'next'
 import { initSocket, SocketServer } from '@/lib/socket/server'
 
 export default function handler(req: NextApiRequest, res: SocketServer) {
-  if (!res.socket.server.io) {
-    // Setting up Socket.IO server silently
-    initSocket(res)
+  try {
+    if (!res.socket.server.io) {
+      initSocket(res)
+    }
+    
+    res.end()
+  } catch (error) {
+    res.status(500).end()
   }
-  
-  res.end()
 }
 
 export const config = {

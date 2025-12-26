@@ -13,6 +13,36 @@ export type SocketServer = NextApiResponse & {
   }
 }
 
+// Global reference to the socket server for broadcasting notifications
+let globalIO: SocketIOServer | null = null
+
+// Function to get or initialize the socket server
+export const getSocketServer = (): SocketIOServer | null => {
+  return globalIO
+}
+
+// Function to set the socket server (called from the API route)
+export const setSocketServer = (io: SocketIOServer) => {
+  globalIO = io
+  console.log('✅ Socket server (globalIO) has been set')
+}
+
+// Helper function to broadcast notifications to a specific user
+export const broadcastNotification = (userId: string, notification: any) => {
+  if (!globalIO) {
+    return
+  }
+  
+  // Broadcast to user's room
+  const userRoom = `user:${userId}`
+  const connectedSockets = globalIO.sockets.adapter.rooms.get(userRoom)
+  
+  if (connectedSockets && connectedSockets.size > 0) {
+    // User is connected, send notification immediately
+    globalIO.to(userRoom).emit('new-notification', notification)
+  }
+}
+
 // Helper function to authenticate socket connection
 const authenticateSocket = async (socket: Socket, token: string): Promise<boolean> => {
   try {
@@ -91,6 +121,9 @@ export const initSocket = (res: SocketServer) => {
         methods: ["GET", "POST"]
       }
     })
+
+    // Store global reference for broadcasting notifications
+    globalIO = io
 
     // Handle socket connections with authentication
     io.on('connection', async (socket: Socket) => {

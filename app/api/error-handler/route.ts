@@ -4,7 +4,7 @@ import { logError, logWarning, logInfo } from '@/lib/logger'
 
 // Error handler wrapper that API routes can use in their try/catch blocks
 export function handleAPIError(error: Error, request: NextRequest, context?: Record<string, any>) {
-  // Log all API errors with email notification
+  // Log all API errors with email notification (server-side only)
   logError('API Error', error, {
     endpoint: request.nextUrl.pathname,
     method: request.method,
@@ -17,13 +17,29 @@ export function handleAPIError(error: Error, request: NextRequest, context?: Rec
     ...context
   })
 
-  return NextResponse.json(
-    { 
-      error: 'Internal server error',
-      timestamp: new Date().toISOString()
-    },
-    { status: 500 }
-  )
+  // Return sanitized error to client (never expose internal details)
+  const isProduction = process.env.NODE_ENV === 'production'
+  
+  if (isProduction) {
+    // Production: Generic error message only
+    return NextResponse.json(
+      { 
+        error: 'An unexpected error occurred. Please try again.',
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    )
+  } else {
+    // Development: Slightly more helpful but still safe
+    return NextResponse.json(
+      { 
+        error: 'Server error occurred. Check server logs for details.',
+        type: context?.errorType || 'unknown_error',
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    )
+  }
 }
 
 // POST handler for client-side error logging

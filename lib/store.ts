@@ -1,6 +1,8 @@
 "use client"
 
 import { create } from "zustand"
+import { sanitizeError } from "./utils/error-handler"
+import { safeFetch } from "./utils/client-error-handler"
 import type {
   User,
   Company,
@@ -127,116 +129,140 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Auth actions
   login: async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    })
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Login failed')
+      if (!response.ok) {
+        const sanitizedError = sanitizeError(data.error || data)
+        throw new Error(sanitizedError.message)
+      }
+
+      // Set authenticated user
+      const user: User = {
+        ...data.user,
+        createdAt: new Date(data.user.createdAt),
+        updatedAt: new Date(data.user.updatedAt),
+      }
+
+      set({ currentUser: user, isAuthenticated: true })
+      return user
+    } catch (error) {
+      const sanitizedError = sanitizeError(error)
+      throw new Error(sanitizedError.message)
     }
-
-    // Set authenticated user
-    const user: User = {
-      ...data.user,
-      createdAt: new Date(data.user.createdAt),
-      updatedAt: new Date(data.user.updatedAt),
-    }
-
-    set({ currentUser: user, isAuthenticated: true })
-    return user
   },
 
   register: async (email: string, password: string, name: string, role: UserRole) => {
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password, name, role }),
-    })
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name, role }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Registration failed')
-    }
+      if (!response.ok) {
+        const sanitizedError = sanitizeError(data.error || data)
+        throw new Error(sanitizedError.message)
+      }
 
-    // Add user to local store (in production, this would come from your database)
-    const newUser: User = {
-      ...data.user,
-      password: undefined, // Never store password in client state
-      createdAt: new Date(data.user.createdAt),
-      updatedAt: new Date(data.user.updatedAt),
-    }
-
-    set((state) => ({
-      users: [...state.users, newUser],
-    }))
-
-    return { user: newUser, needsVerification: data.needsVerification }
-  },
-
-  verifyEmail: async (email: string, code: string) => {
-    const response = await fetch('/api/auth/verify-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, code }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Verification failed')
-    }
-
-    // Update user in local store and set as authenticated
-    const verifiedUser = get().users.find(u => u.email === email)
-    if (verifiedUser) {
-      const updatedUser = {
-        ...verifiedUser,
-        emailVerified: true,
-        verificationCode: undefined,
-        verificationCodeExpiry: undefined,
-        updatedAt: new Date(),
+      // Add user to local store (in production, this would come from your database)
+      const newUser: User = {
+        ...data.user,
+        password: undefined, // Never store password in client state
+        createdAt: new Date(data.user.createdAt),
+        updatedAt: new Date(data.user.updatedAt),
       }
 
       set((state) => ({
-        users: state.users.map((u) =>
-          u.email === email ? updatedUser : u
-        ),
-        // Automatically log in the user after verification
-        currentUser: updatedUser,
-        isAuthenticated: true,
+        users: [...state.users, newUser],
       }))
-    }
 
-    return true
+      return { user: newUser, needsVerification: data.needsVerification }
+    } catch (error) {
+      const sanitizedError = sanitizeError(error)
+      throw new Error(sanitizedError.message)
+    }
+  },
+
+  verifyEmail: async (email: string, code: string) => {
+    try {
+      const response = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const sanitizedError = sanitizeError(data.error || data)
+        throw new Error(sanitizedError.message)
+      }
+
+      // Update user in local store and set as authenticated
+      const verifiedUser = get().users.find(u => u.email === email)
+      if (verifiedUser) {
+        const updatedUser = {
+          ...verifiedUser,
+          emailVerified: true,
+          verificationCode: undefined,
+          verificationCodeExpiry: undefined,
+          updatedAt: new Date(),
+        }
+
+        set((state) => ({
+          users: state.users.map((u) =>
+            u.email === email ? updatedUser : u
+          ),
+          // Automatically log in the user after verification
+          currentUser: updatedUser,
+          isAuthenticated: true,
+        }))
+      }
+
+      return true
+    } catch (error) {
+      const sanitizedError = sanitizeError(error)
+      throw new Error(sanitizedError.message)
+    }
   },
 
   resendVerificationCode: async (email: string) => {
-    const response = await fetch('/api/auth/resend-code', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email }),
-    })
+    try {
+      const response = await fetch('/api/auth/resend-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to resend code')
+      if (!response.ok) {
+        const sanitizedError = sanitizeError(data.error || data)
+        throw new Error(sanitizedError.message)
+      }
+
+      return
+    } catch (error) {
+      const sanitizedError = sanitizeError(error)
+      throw new Error(sanitizedError.message)
     }
-
-    return
   },
 
   logout: async () => {

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { validatePasswordStrength } from "@/lib/services/client-auth"
 import { Navbar } from "@/components/navbar"
+import { withErrorHandling } from "@/lib/utils/client-error-handler"
 import type { UserRole } from "@/lib/types"
 import { AlertCircle } from "lucide-react"
 
@@ -37,7 +38,7 @@ export default function RegisterPage() {
     setPasswordErrors(validation.errors)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = withErrorHandling(async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
@@ -66,11 +67,12 @@ export default function RegisterPage() {
         router.push("/onboarding")
       }
     } catch (err) {
+      // Error is already sanitized by the store
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.")
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   return (
     <div className="min-h-screen bg-background">

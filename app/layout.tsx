@@ -6,6 +6,7 @@ import "./globals.css"
 import { URQLProvider } from "@/lib/providers/urql-provider"
 import { AuthProvider } from "@/lib/providers/auth-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -47,11 +48,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans antialiased`}>
-        <AuthProvider>
-          <URQLProvider>{children}</URQLProvider>
-        </AuthProvider>
-        <Toaster />
-        <Analytics />
+        <ErrorBoundary>
+          <AuthProvider>
+            <URQLProvider>{children}</URQLProvider>
+          </AuthProvider>
+          <Toaster />
+          <Analytics />
+        </ErrorBoundary>
       </body>
     </html>
   )

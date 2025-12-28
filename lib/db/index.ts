@@ -23,8 +23,8 @@ const client = postgres(connectionString, {
     idle_in_transaction_session_timeout: 60000, // 1 minute idle transaction timeout
   },
   
-  // SSL settings for production
-  ssl: process.env.NODE_ENV === 'production' ? 'require' : false,
+  // SSL settings - Neon always requires SSL
+  ssl: 'require',
   
   // Error handling
   onnotice: process.env.NODE_ENV === 'development' ? () => {} : () => {},

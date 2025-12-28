@@ -4,17 +4,18 @@ import { sendVerificationEmail } from '@/lib/services/email'
 import { db, users, verificationCodes } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
-import { logError, logWarning } from '@/lib/logger'
+import { logError } from '@/lib/logger'
+import { handleAPIError } from '@/app/api/error-handler/route'
 
 export async function POST(request: NextRequest) {
   try {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.REGISTRATION.keyPrefix)
-    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.REGISTRATION)
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.REGISTRATION)
     
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
-      console.warn(`Rate limit exceeded for registration attempt from ${rateLimitKey}`)
+      // Rate limit exceeded for registration attempt
       return NextResponse.json(
         { error: `Too many registration attempts. Please try again in ${resetIn}.` },
         { status: 429 }
@@ -56,11 +57,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (existingUser.length > 0) {
-      console.warn('Registration attempt with existing email:', {
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString(),
-        ip: rateLimitKey.split(':')[1]
-      })
+      // Registration attempt with existing email
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 409 }
@@ -71,11 +68,7 @@ export async function POST(request: NextRequest) {
     const passwordValidation = validatePasswordStrength(password)
     if (!passwordValidation.isValid) {
       // Log detailed errors for debugging (always available in server logs)
-      console.warn('Password validation failed:', {
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'), // Partially mask email for privacy
-        errors: passwordValidation.errors,
-        timestamp: new Date().toISOString()
-      })
+      // Password validation failed
 
       // Environment-aware error response
       const isDevelopment = process.env.NODE_ENV === 'development' || process.env.SHOW_PASSWORD_ERRORS === 'true'
@@ -193,18 +186,9 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    // Log registration system errors with email notification
-    logError('Registration system error', error, {
-      endpoint: '/api/auth/register',
-      userAgent: request.headers.get('user-agent'),
-      ip: request.headers.get('x-forwarded-for') || 'unknown',
+    return handleAPIError(error as Error, request, {
       errorType: 'registration_system_error',
       severity: 'high'
     })
-    
-    return NextResponse.json(
-      { error: 'Registration failed. Please try again.' },
-      { status: 500 }
-    )
   }
 }

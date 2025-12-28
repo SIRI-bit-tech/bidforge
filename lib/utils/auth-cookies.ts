@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { verifyJWT } from '@/lib/services/auth'
+import { logError } from '@/lib/logger'
 
 export interface AuthUser {
   userId: string
@@ -30,7 +31,25 @@ export function getAuthUserFromCookie(request: NextRequest): AuthUser | null {
       companyId: payload.companyId
     }
   } catch (error) {
-    // Error extracting auth user from cookie
+    // Log JWT verification failure for debugging and security monitoring
+    logError('JWT verification failed in auth cookie extraction', error, {
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
+      cookieName: 'auth-token',
+      cookiePath: '/',
+      hasToken: !!request.cookies.get('auth-token')?.value,
+      tokenLength: request.cookies.get('auth-token')?.value?.length || 0,
+      userAgent: request.headers.get('user-agent'),
+      ip: request.headers.get('x-forwarded-for') || 
+          request.headers.get('x-real-ip') || 'unknown',
+      url: request.url,
+      method: request.method,
+      timestamp: new Date().toISOString(),
+      severity: 'medium',
+      errorType: 'auth_cookie_verification_failure',
+      securityEvent: true
+    })
+    
     return null
   }
 }

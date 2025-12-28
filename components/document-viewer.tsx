@@ -68,7 +68,9 @@ export function DocumentViewer({ projectId, isOpen, onClose }: DocumentViewerPro
       const data = await response.json()
       setDocuments(data.documents || [])
     } catch (error) {
-      // Failed to load documents
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to load documents:', error)
+      }
       setError(error instanceof Error ? error.message : 'Failed to load documents')
     } finally {
       setLoading(false)

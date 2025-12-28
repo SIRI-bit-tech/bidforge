@@ -54,7 +54,9 @@ export const useSocket = () => {
         })
 
         socket.on('connect_error', (error) => {
-          // Socket connection error
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Socket connection error:', error)
+          }
         })
 
         // Listen for new messages
@@ -107,14 +109,18 @@ export const useSocket = () => {
         })
 
         socket.on('error', (error) => {
-          // Socket error
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Socket error:', error)
+          }
         })
 
         socket.on('disconnect', () => {
           // Disconnected from Socket.IO server
         })
       } catch (error) {
-        // Failed to initialize socket
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to initialize socket:', error)
+        }
       }
     }
 

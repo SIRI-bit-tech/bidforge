@@ -86,7 +86,43 @@ const sendErrorEmail = async (logInfo: any) => {
   }
 }
 
-// Create the logger
+// Create the logger with environment-aware transports
+const createTransports = (): winston.transport[] => {
+  const transports: winston.transport[] = [
+    // Console logging (always available)
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    })
+  ]
+
+  // Only add file transports in non-serverless environments
+  if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+    try {
+      // File logging for development and non-serverless production
+      transports.push(
+        new winston.transports.File({ 
+          filename: 'logs/error.log', 
+          level: 'error',
+          maxsize: 5242880, // 5MB
+          maxFiles: 5,
+        }),
+        new winston.transports.File({ 
+          filename: 'logs/combined.log',
+          maxsize: 5242880, // 5MB
+          maxFiles: 5,
+        })
+      )
+    } catch (error) {
+      // File logging not available in this environment, continue with console only
+    }
+  }
+
+  return transports
+}
+
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
@@ -100,36 +136,10 @@ const logger = winston.createLogger({
     service: 'bidforge',
     environment: process.env.NODE_ENV || 'development'
   },
-  transports: [
-    // Console logging for development
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    
-    // File logging for all levels
-    new winston.transports.File({ 
-      filename: 'logs/error.log', 
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    new winston.transports.File({ 
-      filename: 'logs/combined.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    })
-  ],
+  transports: createTransports()
 })
 
-// If we're not in production, log to the console as well
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }))
-}
+
 
 // Helper functions for common logging patterns
 export const logError = (message: string, error?: Error | any, metadata?: any) => {

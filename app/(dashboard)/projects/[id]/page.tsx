@@ -81,8 +81,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const highestBid = projectBids.length > 0 ? Math.max(...projectBids.map((b) => b.totalAmount)) : 0
 
   return (
-    <div>
-      <div className="mb-8">
+    <div className="min-h-screen">
+      <div className="mb-6 lg:mb-8">
         <Link 
           href={isSubcontractor ? "/opportunities" : "/projects"} 
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
@@ -92,15 +92,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3 mb-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-lg border border-border bg-card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground mb-2">{project.title}</h1>
+      <div className="grid gap-4 lg:gap-6 lg:grid-cols-3 mb-6 lg:mb-8">
+        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
+          <div className="rounded-lg border border-border bg-card p-4 lg:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between mb-4 gap-4">
+              <div className="flex-1">
+                <h1 className="text-xl lg:text-2xl font-bold text-foreground mb-2">{project.title}</h1>
                 <StatusBadge status={project.status} />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col lg:flex-row gap-2 w-full lg:w-auto">
                 {/* Only show contractor actions if user is the project owner */}
                 {isProjectOwner && project.status === "DRAFT" && (
                   <Button
@@ -108,7 +108,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       publishProject(project.id)
                       router.refresh()
                     }}
-                    className="bg-accent hover:bg-accent-hover text-white"
+                    className="w-full lg:w-auto bg-accent hover:bg-accent-hover text-white"
                   >
                     Publish Project
                   </Button>
@@ -120,6 +120,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       router.refresh()
                     }}
                     variant="outline"
+                    className="w-full lg:w-auto"
                   >
                     Close Bidding
                   </Button>
@@ -128,7 +129,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 {isSubcontractor && project.status === "PUBLISHED" && (
                   <Button
                     onClick={() => router.push(`/projects/${project.id}/bid`)}
-                    className="bg-accent hover:bg-accent-hover text-white"
+                    className="w-full lg:w-auto bg-accent hover:bg-accent-hover text-white"
                   >
                     Submit Bid
                   </Button>
@@ -138,14 +139,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
             <p className="text-muted-foreground leading-relaxed mb-6">{project.description}</p>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>{project.location}</span>
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="truncate">{project.location}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span>
+                <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="truncate">
                   Budget: {(project as any).budgetMin && (project as any).budgetMax 
                     ? `${formatCurrency(Number((project as any).budgetMin))} - ${formatCurrency(Number((project as any).budgetMax))}`
                     : project.budget 
@@ -155,8 +156,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>
+                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="truncate">
                   {project.startDate && project.endDate 
                     ? `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
                     : 'Dates not specified'
@@ -164,8 +165,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className={new Date(project.deadline) < new Date() ? "text-destructive" : "text-warning"}>
+                <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className={`truncate ${new Date(project.deadline) < new Date() ? "text-destructive" : "text-warning"}`}>
                   Deadline: {timeRemaining}
                 </span>
               </div>
@@ -186,8 +187,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-xl font-semibold mb-4">
+          <div className="rounded-lg border border-border bg-card p-4 lg:p-6">
+            <h2 className="text-lg lg:text-xl font-semibold mb-4">
               {isProjectOwner ? `Bids Received (${projectBids.length})` : 'Project Bids'}
             </h2>
 
@@ -195,7 +196,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <>
                 {/* Only show bid statistics to project owner */}
                 {isProjectOwner && (
-                  <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-border">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border">
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">Average Bid</div>
                       <div className="text-lg font-bold">{formatCurrency(avgBidAmount)}</div>
@@ -241,8 +242,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-lg border border-border bg-card p-6">
+        <div className="space-y-4 lg:space-y-6">
+          <div className="rounded-lg border border-border bg-card p-4 lg:p-6">
             <h3 className="font-semibold mb-4">
               {isProjectOwner ? "Project Actions" : "Available Actions"}
             </h3>

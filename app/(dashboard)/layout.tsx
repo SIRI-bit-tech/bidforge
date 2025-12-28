@@ -71,7 +71,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </Sheet>
 
         <main className="flex-1 overflow-x-hidden">
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:pl-8 pl-16">
+          {/* Mobile: Full width with minimal padding, Desktop: Constrained with more padding */}
+          <div className="w-full px-4 py-4 lg:mx-auto lg:max-w-7xl lg:px-8 lg:py-8 lg:pl-8 pl-4 lg:pl-16">
             {children}
           </div>
         </main>

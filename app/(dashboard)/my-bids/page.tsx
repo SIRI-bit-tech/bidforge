@@ -64,16 +64,16 @@ export default function MyBidsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">My Bids</h1>
-        <p className="text-muted-foreground">
+    <div className="min-h-screen">
+      <div className="mb-6 lg:mb-8">
+        <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">My Bids</h1>
+        <p className="text-sm lg:text-base text-muted-foreground">
           Track the status of your submitted bids
         </p>
       </div>
 
       {myBids.length > 0 ? (
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6">
           {myBids.map((bid) => {
             const project = projects.find(p => p.id === bid.projectId)
             if (!project) return null
@@ -93,39 +93,39 @@ export default function MyBidsPage() {
 
             return (
               <Card key={bid.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-xl">{project.title}</CardTitle>
+                <CardHeader className="pb-4">
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg lg:text-xl">{project.title}</CardTitle>
                       <CardDescription className="mt-1">
                         Submitted on {bid.submittedAt ? formatDate(bid.submittedAt) : 'Draft'}
                       </CardDescription>
                     </div>
-                    <Badge variant={getStatusColor(bid.status) as any}>
+                    <Badge variant={getStatusColor(bid.status) as any} className="self-start">
                       {bid.status.replace('_', ' ')}
                     </Badge>
                   </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 text-sm">
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                      <span>Bid Amount: {formatCurrency(bid.totalAmount)}</span>
+                      <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">Bid Amount: {formatCurrency(bid.totalAmount)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>{project.location}</span>
+                      <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{project.location}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>
+                      <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">
                         Deadline: {formatDate(project.deadline)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span>Project Budget: {
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">Project Budget: {
                         project.budgetMin && project.budgetMax 
                           ? `${formatCurrency(Number(project.budgetMin))} - ${formatCurrency(Number(project.budgetMax))}`
                           : 'Not specified'
@@ -140,11 +140,11 @@ export default function MyBidsPage() {
                     </div>
                   )}
 
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex flex-col lg:flex-row gap-3 pt-4">
                     <Button
                       variant="outline"
                       onClick={() => router.push(`/projects/${project.id}`)}
-                      className="flex-1"
+                      className="w-full lg:flex-1"
                     >
                       <Eye className="h-4 w-4 mr-2" />
                       View Project
@@ -153,7 +153,7 @@ export default function MyBidsPage() {
                     {bid.status === 'DRAFT' && (
                       <Button
                         onClick={() => router.push(`/projects/${project.id}/bid`)}
-                        className="flex-1 bg-accent hover:bg-accent-hover text-white"
+                        className="w-full lg:flex-1 bg-accent hover:bg-accent-hover text-white"
                       >
                         Continue Editing
                       </Button>
@@ -161,7 +161,7 @@ export default function MyBidsPage() {
                     
                     {bid.status === 'AWARDED' && (
                       <Button
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        className="w-full lg:flex-1 bg-green-600 hover:bg-green-700 text-white"
                         onClick={() => router.push(`/projects/${project.id}`)}
                       >
                         🎉 Congratulations!

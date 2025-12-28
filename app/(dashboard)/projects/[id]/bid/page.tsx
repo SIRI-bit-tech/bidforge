@@ -102,11 +102,11 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
 
   if (!project) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Project Not Found</h1>
+          <h1 className="text-xl lg:text-2xl font-bold mb-4">Project Not Found</h1>
           <p className="text-muted-foreground mb-4">The project you're looking for doesn't exist.</p>
-          <Button onClick={() => router.push('/opportunities')}>
+          <Button onClick={() => router.push('/opportunities')} className="w-full lg:w-auto">
             Back to Opportunities
           </Button>
         </div>
@@ -116,11 +116,11 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
 
   if (currentUser?.role !== 'SUBCONTRACTOR') {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+          <h1 className="text-xl lg:text-2xl font-bold mb-4">Access Denied</h1>
           <p className="text-muted-foreground mb-4">Only subcontractors can submit bids.</p>
-          <Button onClick={() => router.push('/projects')}>
+          <Button onClick={() => router.push('/projects')} className="w-full lg:w-auto">
             Back to Projects
           </Button>
         </div>
@@ -131,8 +131,8 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
   const isValid = formData.totalAmount && parseFloat(formData.totalAmount) > 0
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
+    <div className="min-h-screen">
+      <div className="mb-6 lg:mb-8">
         <Link 
           href={`/projects/${id}`} 
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
@@ -140,11 +140,11 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Project
         </Link>
-        <h1 className="text-3xl font-bold text-foreground mt-4">Submit Bid</h1>
-        <p className="text-muted-foreground mt-1">Submit your bid for: {project.title}</p>
+        <h1 className="text-2xl lg:text-3xl font-bold text-foreground mt-4">Submit Bid</h1>
+        <p className="text-sm lg:text-base text-muted-foreground mt-1">Submit your bid for: {project.title}</p>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="w-full lg:max-w-2xl">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -199,18 +199,18 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex flex-col lg:flex-row gap-3 pt-4">
                 <Button 
                   type="button"
                   variant="outline" 
                   onClick={() => router.push(`/projects/${id}`)} 
-                  className="flex-1"
+                  className="w-full lg:flex-1"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1 bg-accent hover:bg-accent-hover text-white"
+                  className="w-full lg:flex-1 bg-accent hover:bg-accent-hover text-white"
                   disabled={!isValid || submitting}
                 >
                   {submitting ? "Submitting..." : "Submit Bid"}

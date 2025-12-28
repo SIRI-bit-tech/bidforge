@@ -75,14 +75,14 @@ export default function OpportunitiesPage() {
   })
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">Project Opportunities</h1>
-        <p className="text-muted-foreground mt-1">Browse available construction projects and submit bids</p>
+    <div className="min-h-screen">
+      <div className="mb-6 lg:mb-8">
+        <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Project Opportunities</h1>
+        <p className="text-sm lg:text-base text-muted-foreground mt-1">Browse available construction projects and submit bids</p>
       </div>
 
       <div className="mb-6 flex gap-4">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search projects..."
@@ -94,17 +94,17 @@ export default function OpportunitiesPage() {
       </div>
 
       <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-        <TabsList>
-          <TabsTrigger value="published">
+        <TabsList className="w-full lg:w-auto grid grid-cols-3 lg:flex lg:grid-cols-none">
+          <TabsTrigger value="published" className="text-xs lg:text-sm">
             Active ({projects.filter((p) => p.status === "PUBLISHED").length})
           </TabsTrigger>
-          <TabsTrigger value="all">All ({projects.length})</TabsTrigger>
-          <TabsTrigger value="closed">Closed ({projects.filter((p) => p.status === "CLOSED").length})</TabsTrigger>
+          <TabsTrigger value="all" className="text-xs lg:text-sm">All ({projects.length})</TabsTrigger>
+          <TabsTrigger value="closed" className="text-xs lg:text-sm">Closed ({projects.filter((p) => p.status === "CLOSED").length})</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {availableProjects.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-2">
           {availableProjects.map((project) => (
             <ProjectCard
               key={project.id}

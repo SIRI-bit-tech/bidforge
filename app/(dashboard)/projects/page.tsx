@@ -48,34 +48,37 @@ export default function ProjectsPage() {
     activeTab === "all" ? userProjects : userProjects.filter((p) => p.status.toLowerCase() === activeTab)
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen">
+      <div className="flex flex-col lg:flex-row items-start justify-between mb-6 lg:mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Projects</h1>
-          <p className="text-muted-foreground mt-1">Manage all your construction projects</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Projects</h1>
+          <p className="text-sm lg:text-base text-muted-foreground mt-1">Manage all your construction projects</p>
         </div>
-        <Button onClick={() => router.push("/projects/new")} className="bg-accent hover:bg-accent-hover text-white">
+        <Button 
+          onClick={() => router.push("/projects/new")} 
+          className="w-full lg:w-auto bg-accent hover:bg-accent-hover text-white"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Create Project
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList>
-          <TabsTrigger value="all">All ({userProjects.length})</TabsTrigger>
-          <TabsTrigger value="published">
+        <TabsList className="w-full lg:w-auto grid grid-cols-2 lg:flex lg:grid-cols-none">
+          <TabsTrigger value="all" className="text-xs lg:text-sm">All ({userProjects.length})</TabsTrigger>
+          <TabsTrigger value="published" className="text-xs lg:text-sm">
             Active ({userProjects.filter((p) => p.status === "PUBLISHED").length})
           </TabsTrigger>
-          <TabsTrigger value="draft">Draft ({userProjects.filter((p) => p.status === "DRAFT").length})</TabsTrigger>
-          <TabsTrigger value="closed">Closed ({userProjects.filter((p) => p.status === "CLOSED").length})</TabsTrigger>
-          <TabsTrigger value="awarded">
+          <TabsTrigger value="draft" className="text-xs lg:text-sm">Draft ({userProjects.filter((p) => p.status === "DRAFT").length})</TabsTrigger>
+          <TabsTrigger value="closed" className="text-xs lg:text-sm">Closed ({userProjects.filter((p) => p.status === "CLOSED").length})</TabsTrigger>
+          <TabsTrigger value="awarded" className="text-xs lg:text-sm">
             Awarded ({userProjects.filter((p) => p.status === "AWARDED").length})
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {filteredProjects.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-2">
           {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}

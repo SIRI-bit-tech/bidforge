@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
+import { v2 as cloudinary } from 'cloudinary'
 import { verifyJWT } from '@/lib/services/auth'
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
 
 // Define allowed file types and extensions
 const ALLOWED_MIME_TYPES = [
@@ -85,6 +91,14 @@ function getValidatedExtension(fileName: string, mimeType: string): string | nul
   return extension
 }
 
+// Convert file to base64 data URL for Cloudinary upload
+async function fileToDataURL(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer()
+  const buffer = Buffer.from(bytes)
+  const base64 = buffer.toString('base64')
+  return `data:${file.type};base64,${base64}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Authentication check
@@ -124,14 +138,6 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadedFiles = []
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'messages')
-    
-    // Ensure upload directory exists
-    try {
-      await mkdir(uploadDir, { recursive: true })
-    } catch (error) {
-      // Directory might already exist, ignore error
-    }
 
     for (const file of files) {
       // Validate file size (max 10MB)
@@ -151,25 +157,43 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Generate secure filename with validated extension
-      const timestamp = Date.now()
-      const randomString = Math.random().toString(36).substring(2, 15)
-      const fileName = `${timestamp}_${randomString}.${validExtension}`
-      
-      // Convert file to buffer and save
-      const bytes = await file.arrayBuffer()
-      const buffer = Buffer.from(bytes)
-      const filePath = join(uploadDir, fileName)
-      
-      await writeFile(filePath, buffer)
-      
-      uploadedFiles.push({
-        fileName,
-        originalName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        url: `/uploads/messages/${fileName}`,
-      })
+      try {
+        // Convert file to data URL for Cloudinary upload
+        const dataURL = await fileToDataURL(file)
+        
+        // Generate secure filename with validated extension
+        const timestamp = Date.now()
+        const randomString = Math.random().toString(36).substring(2, 15)
+        const fileName = `${timestamp}_${randomString}`
+        
+        // Determine resource type based on file type
+        const resourceType = file.type.startsWith('image/') ? 'image' : 
+                           file.type.startsWith('video/') ? 'video' : 'raw'
+        
+        // Upload to Cloudinary
+        const uploadResult = await cloudinary.uploader.upload(dataURL, {
+          folder: 'bidforge/messages',
+          public_id: fileName,
+          resource_type: resourceType,
+          use_filename: false,
+          unique_filename: true,
+        })
+        
+        uploadedFiles.push({
+          fileName: uploadResult.public_id,
+          originalName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          url: uploadResult.secure_url,
+        })
+        
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError)
+        return NextResponse.json(
+          { error: `Failed to upload ${file.name}. Please try again.` },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json({
@@ -178,7 +202,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    // File upload error
+    console.error('File upload error:', error)
     return NextResponse.json(
       { error: 'Failed to upload files' },
       { status: 500 }

@@ -76,11 +76,6 @@ export function Navbar() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{currentUser.name}</p>
-                      <p className="text-xs text-muted-foreground">{currentUser.email}</p>
-                    </div>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => router.push("/settings/profile")}>Settings</DropdownMenuItem>
                     <DropdownMenuItem onClick={handleLogout}>
                       <LogOut className="mr-2 h-4 w-4" />
@@ -99,16 +94,6 @@ export function Navbar() {
                 </Button>
               </>
             )}
-
-            {/* Mobile menu toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
           </div>
         </div>
 

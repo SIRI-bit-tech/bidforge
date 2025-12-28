@@ -7,7 +7,7 @@ import { logError } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   let payload: any
-  let projectId: string | undefined
+  let projectId: string | undefined = undefined
   
   try {
     // Authentication check

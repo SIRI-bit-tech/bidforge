@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { io, Socket } from 'socket.io-client'
 import { useStore } from '@/lib/store'
+
+// WebSocket functionality temporarily disabled
+// TODO: Implement WebSocket server compatible with Next.js 16 App Router
+// import { io, Socket } from 'socket.io-client'
+
+type Socket = any // Placeholder type
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null)
@@ -9,122 +14,12 @@ export const useSocket = () => {
   useEffect(() => {
     if (!currentUser) return
 
-    // Initialize socket connection
-    const initSocket = async () => {
-      try {
-        // Try to get auth token for WebSocket authentication
-        let token = null
-        
-        try {
-          const tokenResponse = await fetch('/api/auth/socket-token', {
-            credentials: 'include'
-          })
-          
-          if (tokenResponse.ok) {
-            const tokenData = await tokenResponse.json()
-            token = tokenData.token
-          } else {
-            return
-          }
-        } catch (error) {
-          return
-        }
-        
-        if (!token) {
-          return
-        }
-        
-        // Connect to socket with authentication
-        socketRef.current = io({
-          path: '/api/socket',
-          auth: {
-            token: token
-          },
-          transports: ['websocket', 'polling']
-        })
-
-        const socket = socketRef.current
-
-        socket.on('connect', () => {
-          // Join user's personal room immediately
-          socket.emit('join-user-room', currentUser.id)
-          
-          // Load notifications when socket connects to ensure we have latest data
-          loadNotifications()
-        })
-
-        socket.on('connect_error', (error) => {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Socket connection error:', error)
-          }
-        })
-
-        // Listen for new messages
-        socket.on('new-message', (messageData) => {
-          // Validate that server provided a timestamp
-          if (!messageData.sentAt) {
-            return
-          }
-
-          // Validate timestamp format and parse
-          const sentAtDate = new Date(messageData.sentAt)
-          if (isNaN(sentAtDate.getTime())) {
-            return
-          }
-
-          // Convert the message data to the proper format
-          const formattedMessage = {
-            ...messageData,
-            sentAt: sentAtDate,
-            attachments: messageData.attachments || []
-          }
-          addMessage(formattedMessage)
-        })
-
-        // Listen for message read confirmations
-        socket.on('message-read', (data) => {
-          // Update the message read status in the store
-          markMessageAsRead(data.messageId)
-        })
-
-        // Listen for new notifications
-        socket.on('new-notification', (notificationData) => {
-          // Format the notification with proper date parsing
-          const formattedNotification = {
-            ...notificationData,
-            createdAt: new Date(notificationData.createdAt),
-          }
-          
-          // Add to local store immediately for real-time display using proper store action
-          addNotification(formattedNotification)
-        })
-
-        // Listen for typing indicators
-        socket.on('user-typing', () => {
-          // Handle typing indicator UI updates
-        })
-
-        socket.on('user-stopped-typing', () => {
-          // Handle stop typing UI updates
-        })
-
-        socket.on('error', (error) => {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Socket error:', error)
-          }
-        })
-
-        socket.on('disconnect', () => {
-          // Disconnected from Socket.IO server
-        })
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize socket:', error)
-        }
-      }
-    }
-
-    initSocket()
+    // WebSocket functionality temporarily disabled
+    // TODO: Implement WebSocket server compatible with Next.js 16 App Router
+    // The current Socket.IO implementation is not compatible with Next.js 16
+    
+    // Load notifications on mount instead of socket connect
+    loadNotifications()
 
     return () => {
       if (socketRef.current) {
@@ -132,44 +27,32 @@ export const useSocket = () => {
         socketRef.current = null
       }
     }
-  }, [currentUser, addMessage, markMessageAsRead, loadNotifications, addNotification])
+  }, [currentUser, loadNotifications])
 
   const sendMessage = (messageData: any) => {
-    if (socketRef.current) {
-      socketRef.current.emit('send-message', messageData)
-    }
+    // WebSocket functionality temporarily disabled
+    // TODO: Implement proper messaging system
+    console.warn('WebSocket messaging temporarily disabled')
   }
 
   const joinProjectRoom = (projectId: string) => {
-    if (socketRef.current) {
-      socketRef.current.emit('join-project-room', projectId)
-    }
+    // WebSocket functionality temporarily disabled
+    console.warn('WebSocket room joining temporarily disabled')
   }
 
   const markAsRead = (messageId: string, senderId: string) => {
-    if (socketRef.current) {
-      socketRef.current.emit('mark-message-read', { messageId, senderId })
-    }
+    // WebSocket functionality temporarily disabled
+    console.warn('WebSocket read receipts temporarily disabled')
   }
 
   const startTyping = (projectId: string, receiverId: string) => {
-    if (socketRef.current && currentUser) {
-      socketRef.current.emit('typing-start', {
-        userId: currentUser.id,
-        projectId,
-        receiverId
-      })
-    }
+    // WebSocket functionality temporarily disabled
+    console.warn('WebSocket typing indicators temporarily disabled')
   }
 
   const stopTyping = (projectId: string, receiverId: string) => {
-    if (socketRef.current && currentUser) {
-      socketRef.current.emit('typing-stop', {
-        userId: currentUser.id,
-        projectId,
-        receiverId
-      })
-    }
+    // WebSocket functionality temporarily disabled
+    console.warn('WebSocket typing indicators temporarily disabled')
   }
 
   return {

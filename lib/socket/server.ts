@@ -42,18 +42,10 @@ export const getConnectionStats = () => ({ ...connectionStats })
 
 // Helper function to broadcast notifications to a specific user
 export const broadcastNotification = (userId: string, notification: any) => {
-  if (!globalIO) {
-    return
-  }
-  
-  // Broadcast to user's room
-  const userRoom = `user:${userId}`
-  const connectedSockets = globalIO.sockets.adapter.rooms.get(userRoom)
-  
-  if (connectedSockets && connectedSockets.size > 0) {
-    // User is connected, send notification immediately
-    globalIO.to(userRoom).emit('new-notification', notification)
-  }
+  // WebSocket functionality temporarily disabled
+  // TODO: Implement proper notification broadcasting system
+  // The current Socket.IO implementation is not compatible with Next.js 16
+  return
 }
 
 // Helper function to authenticate socket connection

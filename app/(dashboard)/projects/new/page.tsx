@@ -69,6 +69,7 @@ export default function NewProjectPage() {
           startDate: formData.startDate,
           endDate: formData.endDate,
           deadline: formData.deadline,
+          trades: formData.trades, // Include selected trades
           createdById: currentUser?.id,
           status: publish ? 'PUBLISHED' : 'DRAFT',
         }),

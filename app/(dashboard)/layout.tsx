@@ -10,7 +10,7 @@ import { Navbar } from "@/components/navbar"
 import { Sidebar } from "@/components/sidebar"
 import { AuthLoading } from "@/components/auth-loading"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -60,6 +60,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-64 p-0">
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+            <SheetDescription className="sr-only">
+              Access the main navigation menu for the dashboard
+            </SheetDescription>
             <div className="py-6">
               <Sidebar mobile />
             </div>

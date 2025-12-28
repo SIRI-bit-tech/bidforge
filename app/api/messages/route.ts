@@ -157,7 +157,8 @@ export async function POST(request: NextRequest) {
     // Check if the session user is allowed to send messages for the given project
     // Users can send messages if they are:
     // 1. The project owner (contractor), OR
-    // 2. A subcontractor who has submitted a bid to this project
+    // 2. A subcontractor who has submitted a bid to this project, OR
+    // 3. Part of an existing conversation (can reply to messages they've received)
     const isProjectOwner = project.createdById === authenticatedUserId
 
     let canSendMessage = isProjectOwner
@@ -179,9 +180,35 @@ export async function POST(request: NextRequest) {
     }
 
     if (!canSendMessage) {
+      // Check if user is part of an existing conversation for this project
+      // (can reply to messages they've received or sent)
+      const [existingConversation] = await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.projectId, projectId),
+            or(
+              and(
+                eq(messages.senderId, authenticatedUserId),
+                eq(messages.receiverId, receiverId)
+              ),
+              and(
+                eq(messages.senderId, receiverId),
+                eq(messages.receiverId, authenticatedUserId)
+              )
+            )
+          )
+        )
+        .limit(1)
+
+      canSendMessage = !!existingConversation
+    }
+
+    if (!canSendMessage) {
       // User attempted to send message for unauthorized project
       return NextResponse.json(
-        { error: 'Access denied. You must be the project owner or have submitted a bid to send messages for this project.' },
+        { error: 'Access denied. You must be the project owner, have submitted a bid, or be part of an existing conversation to send messages for this project.' },
         { status: 403 }
       )
     }

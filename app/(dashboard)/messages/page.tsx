@@ -218,6 +218,24 @@ export default function MessagesPage() {
     return null
   }, [selectedConversation, conversations, projects, users, currentUser])
   
+  // Poll for new messages every 5 seconds when a conversation is selected
+  useEffect(() => {
+    if (!selectedConv || !currentUser) return
+
+    const pollMessages = async () => {
+      try {
+        await getMessagesByUser(currentUser.id)
+      } catch (error) {
+        console.error('Failed to poll messages:', error)
+      }
+    }
+
+    // Poll every 5 seconds
+    const interval = setInterval(pollMessages, 5000)
+
+    return () => clearInterval(interval)
+  }, [selectedConv, currentUser, getMessagesByUser])
+  
   // Mark messages as read when conversation is selected
   useEffect(() => {
     if (selectedConv && currentUser) {
@@ -233,7 +251,8 @@ export default function MessagesPage() {
         for (const msg of messagesToMarkAsRead) {
           try {
             await markMessageAsRead(msg.id)
-            markAsRead(msg.id, msg.senderId)
+            // WebSocket markAsRead disabled - using API only
+            // markAsRead(msg.id, msg.senderId)
           } catch (error) {
             console.error(`Failed to mark message ${msg.id} as read:`, error)
             // Continue with other messages even if one fails
@@ -247,12 +266,12 @@ export default function MessagesPage() {
     }
   }, [selectedConv, currentUser, markMessageAsRead, markAsRead])
 
-  // Join project room when conversation is selected
-  useEffect(() => {
-    if (selectedConv) {
-      joinProjectRoom(selectedConv.projectId)
-    }
-  }, [selectedConv, joinProjectRoom])
+  // Join project room when conversation is selected (disabled - WebSocket not available)
+  // useEffect(() => {
+  //   if (selectedConv) {
+  //     joinProjectRoom(selectedConv.projectId)
+  //   }
+  // }, [selectedConv, joinProjectRoom])
   
 
   const handleSendMessage = async () => {
@@ -290,17 +309,17 @@ export default function MessagesPage() {
         attachments
       }
       
-      // Send via API first (for persistence), then via Socket.IO (for real-time)
+      // Send via API (this will add to local state automatically)
       const sentMessage = await sendMessage(messageData)
       
-      // Send via socket for real-time delivery
-      const socketMessage = {
-        ...sentMessage,
-        attachments: attachments || []
-      }
-      socketSendMessage(socketMessage)
+      // Send via socket for real-time delivery (disabled for now)
+      // const socketMessage = {
+      //   ...sentMessage,
+      //   attachments: attachments || []
+      // }
+      // socketSendMessage(socketMessage)
       
-      // Refresh messages to ensure conversation appears
+      // Immediately refresh messages to ensure UI is updated
       await getMessagesByUser(currentUser.id)
       
       setNewMessage("")

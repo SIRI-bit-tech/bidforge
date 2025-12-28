@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, projects, projectTrades, trades } from '@/lib/db'
+import { db, projects, projectTrades, trades as tradesTable } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 import { handleAPIError } from '@/app/api/error-handler/route'
@@ -50,11 +50,11 @@ export async function GET(request: NextRequest) {
         createdById: projects.createdById,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
-        tradeName: trades.name,
+        tradeName: tradesTable.name,
       })
       .from(projects)
       .leftJoin(projectTrades, eq(projects.id, projectTrades.projectId))
-      .leftJoin(trades, eq(projectTrades.tradeId, trades.id))
+      .leftJoin(tradesTable, eq(projectTrades.tradeId, tradesTable.id))
 
     // Apply authorization-based filtering
     let filteredProjects = projectsWithTrades
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, status } = body
+    const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, status, trades } = body
     // Note: createdById is ignored from request body - we use authenticated user's ID
 
     // Validate required fields (removed createdById since we derive it from auth)
@@ -198,6 +198,39 @@ export async function POST(request: NextRequest) {
         status: status || 'DRAFT',
       })
       .returning()
+
+    // Save project trades if provided
+    if (trades && Array.isArray(trades) && trades.length > 0) {
+      // For each trade name, ensure it exists and create project-trade relationship
+      for (const tradeName of trades) {
+        // Check if trade exists
+        const [existingTrade] = await db
+          .select({ id: tradesTable.id })
+          .from(tradesTable)
+          .where(eq(tradesTable.name, tradeName))
+          .limit(1)
+
+        let tradeId: string
+        if (existingTrade) {
+          tradeId = existingTrade.id
+        } else {
+          // Create new trade
+          const [newTrade] = await db
+            .insert(tradesTable)
+            .values({ name: tradeName })
+            .returning({ id: tradesTable.id })
+          tradeId = newTrade.id
+        }
+
+        // Create project-trade relationship
+        await db
+          .insert(projectTrades)
+          .values({
+            projectId: project.id,
+            tradeId: tradeId,
+          })
+      }
+    }
 
     // User created project
 

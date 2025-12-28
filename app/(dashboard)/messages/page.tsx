@@ -8,11 +8,10 @@ import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import { MessageFileUpload, AttachmentDisplay } from "@/components/message-file-upload"
 import { Send, MessageSquare, Search, Clock, CheckCheck, ArrowLeft } from "lucide-react"
 import { Message, Project, User, MessageAttachment } from "@/lib/types"
@@ -43,8 +42,6 @@ export default function MessagesPage() {
   } = useStore()
   
   const { 
-    sendMessage: socketSendMessage, 
-    joinProjectRoom, 
     markAsRead
   } = useSocket()
   
@@ -299,7 +296,12 @@ export default function MessagesPage() {
         }
         
         const uploadResult = await uploadResponse.json()
-        attachments = uploadResult.files
+        attachments = uploadResult.files || []
+        
+        // Validate that all files were uploaded successfully
+        if (attachments.length !== selectedFiles.length) {
+          throw new Error(`Only ${attachments.length} of ${selectedFiles.length} files were uploaded successfully`)
+        }
       }
       
       const messageData = {
@@ -310,7 +312,7 @@ export default function MessagesPage() {
       }
       
       // Send via API (this will add to local state automatically)
-      const sentMessage = await sendMessage(messageData)
+      await sendMessage(messageData)
       
       // Send via socket for real-time delivery (disabled for now)
       // const socketMessage = {
@@ -379,6 +381,12 @@ export default function MessagesPage() {
         return
       }
       
+      // Show loading toast for better UX
+      const loadingToast = toast({
+        title: "Downloading...",
+        description: `Preparing ${attachment.originalName} for download`,
+      })
+      
       const response = await fetch(attachment.url, {
         method: 'GET',
         headers: {
@@ -396,7 +404,7 @@ export default function MessagesPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = attachment.originalName || 'download'
+      a.download = attachment.originalName || `download.${attachment.fileType.split('/')[1] || 'bin'}`
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
@@ -407,11 +415,32 @@ export default function MessagesPage() {
         document.body.removeChild(a)
       }, 100)
       
+      // Dismiss loading toast and show success
+      loadingToast.dismiss?.()
+      toast({
+        title: "Download complete",
+        description: `${attachment.originalName} has been downloaded successfully`,
+      })
+      
     } catch (error) {
       console.error('Failed to download file:', error)
+      
+      // Provide more specific error messages
+      let errorMessage = "Failed to download the file. The file may no longer be available."
+      
+      if (error instanceof Error) {
+        if (error.message.includes('404')) {
+          errorMessage = "File not found. This file may have been deleted or moved."
+        } else if (error.message.includes('403')) {
+          errorMessage = "Access denied. You don't have permission to download this file."
+        } else if (error.message.includes('Network')) {
+          errorMessage = "Network error. Please check your internet connection and try again."
+        }
+      }
+      
       toast({
         title: "Download failed",
-        description: "Failed to download the file. The file may no longer be available.",
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -438,7 +467,7 @@ export default function MessagesPage() {
   }
   
   return (
-    <div className="fixed inset-0 lg:relative lg:h-auto flex flex-col lg:container lg:mx-auto lg:px-4 lg:py-8">
+    <div className="fixed top-16 left-0 right-0 bottom-0 lg:relative lg:top-auto lg:left-auto lg:right-auto lg:bottom-auto lg:h-auto flex flex-col lg:container lg:mx-auto lg:px-4 lg:py-8">
       {/* Header - Only show on desktop or when conversations list is visible on mobile */}
       <div className={`mb-4 lg:mb-8 px-4 py-4 lg:px-0 lg:py-0 ${!showConversationsList ? 'hidden lg:block' : ''}`}>
         <div className="flex items-center justify-between">

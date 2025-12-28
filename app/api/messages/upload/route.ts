@@ -9,29 +9,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 })
 
-// Define allowed file types and extensions
-const ALLOWED_MIME_TYPES = [
-  // Images
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  // Documents
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  // Text files
-  'text/plain',
-  'text/csv',
-  // Archives
-  'application/zip',
-  'application/x-zip-compressed',
-]
-
+// Define allowed file extensions
 const ALLOWED_EXTENSIONS = [
   'jpg', 'jpeg', 'png', 'gif', 'webp',
   'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
@@ -116,6 +94,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
+      )
+    }
+
+    // Check if Cloudinary is configured
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error('Cloudinary configuration missing')
+      return NextResponse.json(
+        { error: 'File upload service is not configured' },
+        { status: 500 }
       )
     }
 

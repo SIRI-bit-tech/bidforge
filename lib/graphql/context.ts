@@ -2,6 +2,7 @@ import type { YogaInitialContext } from "graphql-yoga"
 import { db } from "@/lib/db"
 import jwt from "jsonwebtoken"
 import { getJWTSecret } from "@/lib/utils/jwt"
+import { logError } from "@/lib/logger"
 import {
   createUserLoader,
   createCompanyLoader,
@@ -42,7 +43,22 @@ export async function createContext(initialContext: YogaInitialContext): Promise
       userId = decoded.userId
       userRole = decoded.role
     } catch (error) {
-      // Invalid token
+      // Log JWT verification failure for security monitoring
+      logError('JWT verification failed', error, {
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : 'JWT verification error',
+        operation: 'graphql_context_creation',
+        tokenPresent: !!token,
+        tokenLength: token ? token.length : 0,
+        userAgent: initialContext.request.headers.get('user-agent'),
+        ip: initialContext.request.headers.get('x-forwarded-for') || 
+            initialContext.request.headers.get('x-real-ip') || 'unknown',
+        timestamp: new Date().toISOString(),
+        severity: 'medium',
+        errorType: 'jwt_verification_failure',
+        securityEvent: true
+      })
+      // Continue with unauthenticated context
     }
   }
 

@@ -24,7 +24,9 @@ export default function OpportunitiesPage() {
         const projects = await loadProjects()
         // Loaded projects
       } catch (error) {
-        // Failed to load projects
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to load projects:', error)
+        }
         setError('Failed to load projects. Please try again.')
       } finally {
         setLoading(false)

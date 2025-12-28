@@ -118,3 +118,16 @@ drizzle/
 
 # Turbo
 .turbo
+
+# Security audit reports (contain sensitive information)
+security-audit-report.json
+security-audit-*.json
+audit-report*.json
+
+# Security and sensitive files
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/

@@ -3,17 +3,17 @@ import { verifyPassword, generateJWT } from '@/lib/services/auth'
 import { db, users } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
-import { logError, logWarning } from '@/lib/logger'
+import { handleAPIError } from '@/app/api/error-handler/route'
 
 export async function POST(request: NextRequest) {
   try {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.LOGIN.keyPrefix)
-    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.LOGIN)
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.LOGIN)
     
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
-      console.warn(`Rate limit exceeded for login attempt from ${rateLimitKey}`)
+      // Rate limit exceeded for login attempt
       return NextResponse.json(
         { error: `Too many login attempts. Please try again in ${resetIn}.` },
         { status: 429 }
@@ -40,10 +40,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (!user) {
-      console.warn('Login attempt for non-existent user:', {
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+      // Login attempt for non-existent user
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -53,11 +50,7 @@ export async function POST(request: NextRequest) {
     // Verify password
     const isValidPassword = await verifyPassword(password, user.passwordHash)
     if (!isValidPassword) {
-      console.warn('Invalid password for user:', {
-        userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+      // Invalid password for user
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -66,11 +59,7 @@ export async function POST(request: NextRequest) {
 
     // Check if email is verified
     if (!user.emailVerified) {
-      console.warn('Login attempt with unverified email:', {
-        userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
-      })
+      // Login attempt with unverified email
       return NextResponse.json(
         { 
           error: 'Please verify your email address before logging in',
@@ -117,18 +106,9 @@ export async function POST(request: NextRequest) {
     return response
 
   } catch (error) {
-    // Log login errors with email notification
-    logError('Login system error', error, {
-      endpoint: '/api/auth/login',
-      userAgent: request.headers.get('user-agent'),
-      ip: request.headers.get('x-forwarded-for') || 'unknown',
+    return handleAPIError(error as Error, request, {
       errorType: 'login_system_error',
       severity: 'high'
     })
-    
-    return NextResponse.json(
-      { error: 'Login failed. Please try again.' },
-      { status: 500 }
-    )
   }
 }

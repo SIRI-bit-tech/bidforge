@@ -1,19 +1,20 @@
-// This file enables global error handling for all API routes
+// Centralized API error handling wrapper for Next.js API routes
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
 
-// This will be imported by Next.js automatically for error handling
-export async function handleAPIError(error: Error, request: NextRequest) {
+// Error handler wrapper that API routes can use in their try/catch blocks
+export function handleAPIError(error: Error, request: NextRequest, context?: Record<string, any>) {
   // Log all API errors with email notification
-  logError('Global API Error', error, {
+  logError('API Error', error, {
     endpoint: request.nextUrl.pathname,
     method: request.method,
     userAgent: request.headers.get('user-agent'),
     ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
     timestamp: new Date().toISOString(),
     severity: 'high',
-    errorType: 'global_api_error',
-    url: request.url
+    errorType: 'api_error',
+    url: request.url,
+    ...context
   })
 
   return NextResponse.json(
@@ -23,4 +24,15 @@ export async function handleAPIError(error: Error, request: NextRequest) {
     },
     { status: 500 }
   )
+}
+
+// Wrapper function for API route handlers to automatically catch and handle errors
+export function withErrorHandler(handler: (req: NextRequest, context?: any) => Promise<NextResponse>) {
+  return async (req: NextRequest, context?: any) => {
+    try {
+      return await handler(req, context)
+    } catch (error) {
+      return handleAPIError(error as Error, req, context)
+    }
+  }
 }

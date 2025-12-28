@@ -3,6 +3,7 @@ import { db, projects, projectTrades, trades } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 import { logError } from '@/lib/logger'
+import { handleAPIError } from '@/app/api/error-handler/route'
 
 export async function GET(request: NextRequest) {
   try {
@@ -123,19 +124,13 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    logError('Failed to fetch projects', error, {
-      endpoint: '/api/projects',
+    return handleAPIError(error as Error, request, {
       method: 'GET',
       userId: payload?.userId || 'unknown',
       userRole: payload?.role || 'unknown',
       errorType: 'projects_fetch_error',
       severity: 'medium'
     })
-    
-    return NextResponse.json(
-      { error: 'Failed to fetch projects' },
-      { status: 500 }
-    )
   }
 }
 
@@ -209,18 +204,12 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    logError('Failed to create project', error, {
-      endpoint: '/api/projects',
+    return handleAPIError(error as Error, request, {
       method: 'POST',
       userId: payload?.userId || 'unknown',
       userRole: payload?.role || 'unknown',
       errorType: 'project_creation_error',
       severity: 'high'
     })
-    
-    return NextResponse.json(
-      { error: 'Failed to create project' },
-      { status: 500 }
-    )
   }
 }

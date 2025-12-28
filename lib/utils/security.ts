@@ -86,7 +86,6 @@ export function sanitizeHtml(html: string): string {
     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ol', 'ul', 'li', 'a'],
     ALLOWED_ATTR: ['href', 'target'],
     ALLOW_DATA_ATTR: false,
-    FORBID_SCRIPT: true,
     FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input'],
   })
 }
@@ -109,13 +108,52 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"'\/]/g, (s) => map[s])
 }
 
-// Path traversal prevention
+// Path traversal prevention with iterative sanitization
 export function sanitizePath(path: string): string {
-  return path
-    .replace(/\.\./g, '') // Remove parent directory references
-    .replace(/[<>:"|?*]/g, '') // Remove invalid path characters
-    .replace(/^\/+/, '') // Remove leading slashes
-    .trim()
+  if (!path || typeof path !== 'string') {
+    return ''
+  }
+
+  let sanitized = path.trim()
+  
+  // Iteratively remove path traversal patterns until none remain
+  let previousLength = 0
+  while (sanitized.length !== previousLength) {
+    previousLength = sanitized.length
+    
+    // Remove various forms of parent directory references
+    sanitized = sanitized
+      .replace(/\.\.\//g, '')     // Remove ../
+      .replace(/\.\.\\/g, '')     // Remove ..\
+      .replace(/\.\./g, '')       // Remove isolated ..
+      .replace(/\.\/\.\./g, '')   // Remove ./../
+      .replace(/\.\\\.\./g, '')   // Remove .\..
+      .replace(/\/\.\.\//g, '/')  // Remove /../ in middle
+      .replace(/\\\.\.\\/g, '\\') // Remove \..\
+  }
+  
+  // Normalize path separators and collapse multiple separators
+  sanitized = sanitized
+    .replace(/[\/\\]+/g, '/') // Normalize separators to forward slash and collapse multiples
+    .replace(/\/+/g, '/')     // Collapse multiple forward slashes
+    .replace(/\.+/g, '.')     // Collapse multiple dots to single dot
+  
+  // Remove dangerous characters
+  sanitized = sanitized.replace(/[<>:"|?*]/g, '')
+  
+  // Remove leading slashes and dots
+  sanitized = sanitized.replace(/^[\/\\\.]+/, '')
+  
+  // Final cleanup
+  sanitized = sanitized.trim()
+  
+  // Ensure no traversal patterns remain after all processing
+  if (sanitized.includes('..') || sanitized.includes('./') || sanitized.includes('.\\')) {
+    // If any traversal patterns still exist, reject the entire path
+    return ''
+  }
+  
+  return sanitized
 }
 
 // Rate limiting key sanitization
@@ -266,9 +304,16 @@ export function validateJWTStructure(token: string): boolean {
   if (parts.length !== 3) return false
   
   try {
-    // Validate base64 encoding
+    // Validate base64 encoding - compatible with both browser and Node.js
     parts.forEach(part => {
-      atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+      const urlSafeBase64 = part.replace(/-/g, '+').replace(/_/g, '/')
+      
+      // Use Buffer.from for Node.js compatibility, fallback to atob for browser
+      if (typeof Buffer !== 'undefined') {
+        Buffer.from(urlSafeBase64, 'base64')
+      } else {
+        atob(urlSafeBase64)
+      }
     })
     return true
   } catch {

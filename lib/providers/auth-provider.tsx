@@ -31,7 +31,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         await restoreSession()
       } catch (error) {
-        // Failed to restore session
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to restore session:', error)
+        }
       } finally {
         setIsLoading(false)
         setIsInitialized(true)

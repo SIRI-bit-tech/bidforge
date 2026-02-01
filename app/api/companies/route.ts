@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         logo: companies.logo,
         createdAt: companies.createdAt,
         updatedAt: companies.updatedAt,
+        verified: companies.verified,
         tradeName: trades.name,
       })
       .from(companies)
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     // Group trades by company
     const companiesMap = new Map()
-    
+
     companiesWithTrades.forEach(row => {
       if (!companiesMap.has(row.id)) {
         companiesMap.set(row.id, {
@@ -82,11 +83,12 @@ export async function GET(request: NextRequest) {
           logo: row.logo,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
+          verified: row.verified,
           trades: [],
           certifications: [], // TODO: Add certifications if needed
         })
       }
-      
+
       if (row.tradeName) {
         const company = companiesMap.get(row.id)
         if (!company.trades.includes(row.tradeName)) {
@@ -116,9 +118,9 @@ export async function GET(request: NextRequest) {
       errorType: 'companies_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to fetch companies'  },
+      { error: 'Failed to fetch companies' },
       { status: 500 }
     )
   }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, messages, users, projects, bids } from '@/lib/db'
+import { db, messages, users, projects, bids, notifications } from '@/lib/db'
 import { eq, and, or, desc } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
+import Ably from 'ably'
 
 // Get messages for authenticated user
 export async function GET(request: NextRequest) {
@@ -29,10 +30,10 @@ export async function GET(request: NextRequest) {
 
     // Use authenticated user's ID for authorization (ignore userId query param)
     const authenticatedUserId = payload.userId
-    
+
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
-    
+
     // Note: userId query parameter is ignored for security - we only use the authenticated user's ID
 
     let query = db
@@ -99,9 +100,9 @@ export async function GET(request: NextRequest) {
       errorType: 'messages_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to fetch messages'  },
+      { error: 'Failed to fetch messages' },
       { status: 500 }
     )
   }
@@ -256,11 +257,49 @@ export async function POST(request: NextRequest) {
     // Message sent: messageId, projectId, senderId, receiverId, timestamp, hasAttachments
 
     // Format the message for JSON response
+    // Format the message for JSON response
     const formattedMessage = {
       ...newMessage,
       sentAt: newMessage.sentAt.toISOString(),
       attachments: attachments || []
     }
+
+    // --- Ably & Notification Logic ---
+    try {
+      // Initialize Ably (ensure ABLY_API_KEY is set in env)
+      if (process.env.ABLY_API_KEY) {
+        const client = new Ably.Rest(process.env.ABLY_API_KEY)
+
+        // 1. Publish Message for Real-time Chat
+        const channelName = `messages:${receiverId}`
+        await client.channels.get(channelName).publish('new-message', formattedMessage)
+
+        // 2. Create Persistent Notification
+        const [newNotification] = await db
+          .insert(notifications)
+          .values({
+            userId: receiverId,
+            type: 'MESSAGE',
+            title: 'New Message',
+            message: `You have a new message from ${project.title}`, // Simplified for brevity
+            link: `/messages?project=${projectId}&user=${authenticatedUserId}`,
+            read: false,
+            createdAt: new Date(),
+          })
+          .returning()
+
+        // 3. Publish Notification for Real-time Badge/Toast
+        const notifChannel = `notifications:${receiverId}`
+        await client.channels.get(notifChannel).publish('new-notification', {
+          ...newNotification,
+          createdAt: newNotification.createdAt.toISOString()
+        })
+      }
+    } catch (ablyError) {
+      // Don't block response if real-time fails
+      console.error('Ably/Notification error:', ablyError)
+    }
+    // -------------------------------
 
     return NextResponse.json({ message: formattedMessage }, { status: 201 })
   } catch (error) {
@@ -269,9 +308,9 @@ export async function POST(request: NextRequest) {
       errorType: 'messages_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to send message'  },
+      { error: 'Failed to send message' },
       { status: 500 }
     )
   }

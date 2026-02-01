@@ -21,6 +21,8 @@ export const documentTypeEnum = pgEnum("document_type", [
   "PHOTO",
   "OTHER",
 ])
+export const companyPlanEnum = pgEnum("company_plan", ["FREE", "PRO", "ENTERPRISE"])
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED", "INACTIVE"])
 
 // Users table
 export const users = pgTable("users", {
@@ -48,8 +50,10 @@ export const companies = pgTable("companies", {
   website: varchar("website", { length: 255 }),
   description: text("description"),
   logo: text("logo"),
-  plan: text("plan").default("FREE").notNull(),
-  subscriptionStatus: text("subscription_status").default("INACTIVE").notNull(),
+  plan: companyPlanEnum("plan").default("FREE").notNull(),
+  subscriptionStatus: subscriptionStatusEnum("subscription_status").default("INACTIVE").notNull(),
+  storageUsed: integer("storage_used").default(0).notNull(),
+  verified: boolean("verified").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })

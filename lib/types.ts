@@ -59,6 +59,8 @@ export interface Company {
   certifications: Certification[]
   plan: "FREE" | "PRO" | "ENTERPRISE"
   subscriptionStatus: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INACTIVE"
+  storageUsed: number // in bytes
+  verified: boolean
   createdAt: Date
 }
 

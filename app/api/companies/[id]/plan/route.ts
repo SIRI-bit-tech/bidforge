@@ -6,9 +6,10 @@ import { logError } from '@/lib/logger'
 
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const params = await props.params
         const { id } = params
         const token = request.cookies.get('auth-token')?.value
 
@@ -21,6 +22,15 @@ export async function PATCH(
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
         }
 
+        // Authorization check: Ensure user belongs to the company being updated
+        // Allow override for 'ADMIN' role if it exists
+        if (String(payload.companyId) !== String(id) && payload.role !== 'ADMIN') {
+            return NextResponse.json(
+                { error: 'Access denied. You can only update your own company plan.' },
+                { status: 403 }
+            )
+        }
+
         const body = await request.json()
         const { plan } = body
 
@@ -29,13 +39,21 @@ export async function PATCH(
         }
 
         // Update company plan in DB
-        await db.update(companies)
+        const updated = await db.update(companies)
             .set({
                 plan,
                 subscriptionStatus: 'ACTIVE',
                 updatedAt: new Date()
             })
             .where(eq(companies.id, id))
+            .returning()
+
+        if (!updated.length) {
+            return NextResponse.json({
+                success: false,
+                message: 'Company not found'
+            }, { status: 404 })
+        }
 
         return NextResponse.json({
             success: true,

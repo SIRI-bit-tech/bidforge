@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, MapPin, Phone, Globe, Award, Mail, Calendar, Building } from "lucide-react"
+import { Search, MapPin, Phone, Globe, Award, Mail, Calendar, Building, BadgeCheck } from "lucide-react"
 import { User, Company } from "@/lib/types"
 import { usePlanLimits } from "@/hooks/use-plan-limits"
 
@@ -205,6 +205,12 @@ export default function SubcontractorsPage() {
               <CardTitle className="text-lg">{user.name}</CardTitle>
               <CardDescription className="text-sm">
                 {company?.name || "Independent Contractor"}
+                {company?.verified && (
+                  <span className="inline-flex items-center gap-1 ml-2 text-blue-600" title="Verified Pro">
+                    <BadgeCheck className="h-4 w-4 fill-blue-100" />
+                    <span className="text-xs font-medium">Verified</span>
+                  </span>
+                )}
               </CardDescription>
               {company?.type && (
                 <Badge variant="secondary" className="mt-1">

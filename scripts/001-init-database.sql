@@ -10,6 +10,8 @@ CREATE TYPE project_status AS ENUM ('DRAFT', 'PUBLISHED', 'CLOSED', 'AWARDED');
 CREATE TYPE bid_status AS ENUM ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'AWARDED', 'DECLINED', 'WITHDRAWN');
 CREATE TYPE invitation_status AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED');
 CREATE TYPE document_type AS ENUM ('BLUEPRINT', 'SPECIFICATION', 'CONTRACT', 'ADDENDUM', 'PHOTO', 'OTHER');
+CREATE TYPE company_plan AS ENUM ('FREE', 'PRO', 'ENTERPRISE');
+CREATE TYPE subscription_status AS ENUM ('ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'INACTIVE');
 
 -- Note: All tables are created automatically by Drizzle ORM
 -- This script is for documentation purposes and initial enum setup

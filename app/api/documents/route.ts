@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, documents, projects, bids } from '@/lib/db'
-import { eq, desc, and } from 'drizzle-orm'
+import { db, documents, projects, bids, users, companies } from '@/lib/db'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
 
     // Check if user has access (is owner OR has submitted a bid)
     const isOwner = projectAccess.createdById === payload.userId
-    
+
     let hasAccess = isOwner
-    
+
     if (!hasAccess) {
       // Check if user has submitted a bid to this project
       const [bidAccess] = await db
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
           )
         )
         .limit(1)
-      
+
       hasAccess = !!bidAccess
     }
 
@@ -88,7 +88,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. Use authenticated user's ID as uploadedById (drop uploadedBy from payload)
+    // 3. User & Company Access Validation
+    const [userData] = await db
+      .select({
+        companyId: users.companyId,
+        plan: companies.plan,
+        storageUsed: companies.storageUsed,
+      })
+      .from(users)
+      .leftJoin(companies, eq(users.companyId, companies.id))
+      .where(eq(users.id, payload.userId))
+      .limit(1)
+
+    if (!userData || !userData.companyId) {
+      return NextResponse.json(
+        { error: 'User must belong to a company to upload documents' },
+        { status: 400 }
+      )
+    }
+
+    // Define Quotas (in Bytes)
+    const QUOTAS = {
+      FREE: 50 * 1024 * 1024, // 50MB
+      PRO: 10 * 1024 * 1024 * 1024, // 10GB
+      ENTERPRISE: Number.MAX_SAFE_INTEGER, // Unlimited
+    }
+
+    const currentPlan = (userData.plan as keyof typeof QUOTAS) || "FREE"
+    const limit = QUOTAS[currentPlan]
+    const sizeInBytes = size || 0
+
+    if ((userData.storageUsed || 0) + sizeInBytes > limit) {
+      return NextResponse.json(
+        { error: `Storage quota exceeded for ${currentPlan} plan. Please upgrade or delete old files.` },
+        { status: 403 }
+      )
+    }
+
+    // 4. Insert Document
     const [newDocument] = await db
       .insert(documents)
       .values({
@@ -96,11 +133,20 @@ export async function POST(request: NextRequest) {
         name,
         type,
         url,
-        size: size || 0,
+        size: sizeInBytes,
         uploadedById: payload.userId, // Use authenticated user's ID
         version: 1,
       })
       .returning()
+
+    // 5. Update Company Storage Usage
+    await db
+      .update(companies)
+      .set({
+        storageUsed: sql`${companies.storageUsed} + ${sizeInBytes}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(companies.id, userData.companyId))
 
     // Document uploaded successfully
 
@@ -111,9 +157,9 @@ export async function POST(request: NextRequest) {
       errorType: 'documents_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to save document'  },
+      { error: 'Failed to save document' },
       { status: 500 }
     )
   }
@@ -169,9 +215,9 @@ export async function GET(request: NextRequest) {
 
     // Check if user is project owner OR has submitted a bid (project access)
     const isOwner = projectAccess.createdById === payload.userId
-    
+
     let hasAccess = isOwner
-    
+
     if (!hasAccess) {
       // Check if user has submitted a bid to this project
       const [bidAccess] = await db
@@ -184,7 +230,7 @@ export async function GET(request: NextRequest) {
           )
         )
         .limit(1)
-      
+
       hasAccess = !!bidAccess
     }
 
@@ -210,9 +256,9 @@ export async function GET(request: NextRequest) {
       errorType: 'documents_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to fetch documents'  },
+      { error: 'Failed to fetch documents' },
       { status: 500 }
     )
   }

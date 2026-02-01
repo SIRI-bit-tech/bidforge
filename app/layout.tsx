@@ -7,6 +7,7 @@ import { URQLProvider } from "@/lib/providers/urql-provider"
 import { AuthProvider } from "@/lib/providers/auth-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { RealTimeProvider } from "@/components/real-time-provider"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -50,7 +51,9 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <ErrorBoundary>
           <AuthProvider>
-            <URQLProvider>{children}</URQLProvider>
+            <RealTimeProvider>
+              <URQLProvider>{children}</URQLProvider>
+            </RealTimeProvider>
           </AuthProvider>
           <Toaster />
           <Analytics />

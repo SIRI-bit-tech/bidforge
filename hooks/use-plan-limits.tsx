@@ -71,7 +71,9 @@ export function usePlanLimits() {
             const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
             const monthlyBids = bids.filter(b =>
                 b.subcontractorId === currentUser.id &&
-                new Date(b.updatedAt) >= firstDayOfMonth
+                b.status === "SUBMITTED" &&
+                b.submittedAt &&
+                new Date(b.submittedAt) >= firstDayOfMonth
             ).length
 
             if (monthlyBids >= roleLimits.maxBidsPerMonth) {
@@ -99,9 +101,20 @@ export function usePlanLimits() {
     }
 
     const showUpgradeToast = (title: string, description: string) => {
+        // Calculate next reset date for monthly limits
+        const now = new Date()
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+        const daysUntilReset = Math.ceil((nextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        const resetDate = nextMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+
+        // Check if this is a monthly limit (for subcontractors)
+        const isMonthlyLimit = title.includes("Monthly") || title.includes("Bid")
+
         toast({
             title,
-            description,
+            description: isMonthlyLimit
+                ? `${description}\n\nYour limit resets in ${daysUntilReset} day${daysUntilReset !== 1 ? 's' : ''} (${resetDate}).`
+                : description,
             variant: "default",
             action: (
                 <button

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { useAblyChat } from "@/hooks/use-ably-chat"
 import { Room, Message as ChatMessage } from "@ably/chat"
 import { useStore } from "@/lib/store"
@@ -30,9 +30,13 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
     const [isSending, setIsSending] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Room ID format: project-{projectId}-{user1Id}-{user2Id} (sorted)
-    const roomId = `project-${projectId}-${[currentUser?.id, recipientId].sort().join("-")}`
+    const roomId = useMemo(() => {
+        if (!currentUser?.id) return null
+        return `project-${projectId}-${[currentUser.id, recipientId].sort().join("-")}`
+    }, [projectId, currentUser?.id, recipientId])
 
     useEffect(() => {
         if (!isConnected || !currentUser) return
@@ -40,6 +44,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
         let currentRoom: Room | null = null
 
         async function setupRoom() {
+            if (!roomId) return
             try {
                 const r = await getRoom(roomId)
                 if (!r) return
@@ -83,6 +88,11 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
                 return () => {
                     unsubMessages()
                     unsubTyping()
+                    if (typingTimeoutRef.current) {
+                        clearTimeout(typingTimeoutRef.current)
+                        typingTimeoutRef.current = null
+                    }
+                    r.typing.stop().catch(() => { })
                     r.presence.leave().catch(console.error)
                     r.detach().catch(console.error)
                 }
@@ -96,15 +106,16 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
         return () => {
             cleanup.then((fn) => fn?.())
         }
-    }, [isConnected, currentUser, roomId, recipientId, getRoom])
+    }, [isConnected, currentUser?.id, roomId, recipientId, getRoom])
 
     const handleSendMessage = async () => {
-        if (!room || !newMessage.trim() || !currentUser || isSending) return
+        const messageText = newMessage.trim()
+        if (!room || !messageText || !currentUser || isSending) return
 
         setIsSending(true)
         try {
             await room.messages.send({
-                text: newMessage,
+                text: messageText,
                 metadata: {
                     senderId: currentUser.id,
                     senderName: currentUser.name,
@@ -125,7 +136,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
                 body: JSON.stringify({
                     projectId,
                     receiverId: recipientId,
-                    text: newMessage,
+                    text: messageText,
                 }),
             })
         } catch (error) {
@@ -139,16 +150,21 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
     const handleTyping = async () => {
         if (!room || !currentUser) return
 
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current)
+        }
+
         if (!isTyping) {
             setIsTyping(true)
         }
         await room.typing.keystroke()
 
         // Auto-stop typing after 5 seconds of inactivity
-        setTimeout(async () => {
+        typingTimeoutRef.current = setTimeout(async () => {
             if (isTyping) {
                 await room.typing.stop()
                 setIsTyping(false)
+                typingTimeoutRef.current = null
             }
         }, 5000)
     }

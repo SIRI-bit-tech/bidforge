@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
-import { useSocket } from "@/lib/hooks/useSocket"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -19,7 +18,6 @@ import { cn } from "@/lib/utils"
 export function NotificationsDropdown() {
   const router = useRouter()
   const { currentUser, getNotificationsByUser, markNotificationAsRead, markAllNotificationsAsRead, loadNotifications } = useStore()
-  const { isConnected } = useSocket() // Initialize socket connection
   const [open, setOpen] = useState(false)
   const [hasNewNotification, setHasNewNotification] = useState(false)
 
@@ -28,16 +26,16 @@ export function NotificationsDropdown() {
     if (currentUser) {
       loadNotifications()
     }
-  }, [currentUser, isConnected, loadNotifications])
+  }, [currentUser, loadNotifications])
 
   // Track when new notifications arrive to show animation
   const notifications = currentUser ? getNotificationsByUser(currentUser.id) : []
   const unreadCount = notifications.filter((n) => !n.read).length
-  
+
   // Track previous unread count to detect new notifications
   const [prevUnreadCount, setPrevUnreadCount] = useState(0)
   const isFirstRender = useRef(true)
-  
+
   useEffect(() => {
     // Skip animation on first render
     if (isFirstRender.current) {
@@ -45,7 +43,7 @@ export function NotificationsDropdown() {
       setPrevUnreadCount(unreadCount)
       return
     }
-    
+
     // For subsequent updates, animate when unread count increases
     if (unreadCount > prevUnreadCount) {
       setHasNewNotification(true)
@@ -53,10 +51,10 @@ export function NotificationsDropdown() {
       const timer = setTimeout(() => setHasNewNotification(false), 3000)
       return () => clearTimeout(timer)
     }
-    
+
     setPrevUnreadCount(unreadCount)
   }, [unreadCount])
-  
+
   const recentNotifications = notifications.slice(0, 5) // Show only 5 most recent
 
   if (!currentUser) return null
@@ -120,7 +118,7 @@ export function NotificationsDropdown() {
             </Button>
           )}
         </div>
-        
+
         {notifications.length > 0 ? (
           <>
             <ScrollArea className="max-h-96">
@@ -148,8 +146,8 @@ export function NotificationsDropdown() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mb-1 overflow-hidden">
-                        {notification.message.length > 100 
-                          ? `${notification.message.substring(0, 100)}...` 
+                        {notification.message.length > 100
+                          ? `${notification.message.substring(0, 100)}...`
                           : notification.message}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -160,14 +158,14 @@ export function NotificationsDropdown() {
                 ))}
               </div>
             </ScrollArea>
-            
+
             {notifications.length > 5 && (
               <>
                 <Separator />
                 <div className="p-2">
-                  <Button 
-                    variant="ghost" 
-                    className="w-full text-sm" 
+                  <Button
+                    variant="ghost"
+                    className="w-full text-sm"
                     onClick={() => {
                       router.push('/notifications')
                       setOpen(false)

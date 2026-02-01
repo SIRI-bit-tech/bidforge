@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MessageFileUpload, AttachmentDisplay } from "@/components/message-file-upload"
 import { Send, MessageSquare, Search, Clock, CheckCheck, ArrowLeft } from "lucide-react"
+import { ChatRoom } from "@/components/chat-room"
 import { Message, Project, User, MessageAttachment } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
 
@@ -29,7 +30,7 @@ interface Conversation {
 export default function MessagesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { 
+  const {
     currentUser,
     messages,
     projects,
@@ -40,21 +41,18 @@ export default function MessagesPage() {
     loadUsers,
     loadProjects
   } = useStore()
-  
-  const { 
+
+  const {
     markAsRead
   } = useSocket()
-  
+
   const { toast } = useToast()
-  
+
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
-  const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [uploading, setUploading] = useState(false)
   const [showConversationsList, setShowConversationsList] = useState(true)
-  
+
   // Load messages and related data on component mount
   useEffect(() => {
     const loadData = async () => {
@@ -70,36 +68,36 @@ export default function MessagesPage() {
         }
       }
     }
-    
+
     loadData()
   }, [currentUser, getMessagesByUser, loadUsers, loadProjects])
-  
+
   // Group messages into conversations by project
   const conversations = useMemo(() => {
     if (!currentUser) return []
-    
+
     const conversationMap = new Map<string, Conversation>()
-    
+
     // Get all messages where current user is sender or receiver
-    const userMessages = messages.filter(msg => 
+    const userMessages = messages.filter(msg =>
       msg.senderId === currentUser.id || msg.receiverId === currentUser.id
     )
-    
+
     userMessages.forEach(message => {
       const project = projects.find(p => p.id === message.projectId)
       if (!project) {
         return
       }
-      
+
       // Determine the other user in the conversation
       const otherUserId = message.senderId === currentUser.id ? message.receiverId : message.senderId
       const otherUser = users.find(u => u.id === otherUserId)
       if (!otherUser) {
         return
       }
-      
+
       const key = `${message.projectId}::${otherUserId}`
-      
+
       if (!conversationMap.has(key)) {
         conversationMap.set(key, {
           projectId: message.projectId,
@@ -110,21 +108,21 @@ export default function MessagesPage() {
           lastMessage: undefined
         })
       }
-      
+
       const conversation = conversationMap.get(key)!
       conversation.messages.push(message)
-      
+
       // Count unread messages (messages sent to current user that are unread)
       if (message.receiverId === currentUser.id && !message.read) {
         conversation.unreadCount++
       }
-      
+
       // Update last message if this is more recent
       if (!conversation.lastMessage || message.sentAt > conversation.lastMessage.sentAt) {
         conversation.lastMessage = message
       }
     })
-    
+
     // Sort messages within each conversation
     conversationMap.forEach(conversation => {
       conversation.messages.sort((a, b) => {
@@ -133,7 +131,7 @@ export default function MessagesPage() {
         return aTime - bTime
       })
     })
-    
+
     // Convert to array and sort by last message time
     const result = Array.from(conversationMap.values())
       .sort((a, b) => {
@@ -141,17 +139,17 @@ export default function MessagesPage() {
         const bTime = b.lastMessage ? new Date(b.lastMessage.sentAt).getTime() : 0
         return bTime - aTime
       })
-    
+
     return result
   }, [messages, projects, users, currentUser])
 
   // Handle URL parameters for pre-selecting conversations
   useEffect(() => {
     if (!searchParams) return
-    
+
     const projectId = searchParams.get('project')
     const userId = searchParams.get('user')
-    
+
     if (projectId && userId) {
       // Auto-select conversation based on URL params
       setSelectedConversation(`${projectId}::${userId}`)
@@ -173,34 +171,34 @@ export default function MessagesPage() {
       router.replace('/messages', { scroll: false })
     }
   }, [searchParams, conversations, projects, currentUser, router])
-  
+
   // Filter conversations based on search
   const filteredConversations = useMemo(() => {
     if (!searchQuery) return conversations
-    
-    return conversations.filter(conv => 
+
+    return conversations.filter(conv =>
       conv.otherUser.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lastMessage?.text.toLowerCase().includes(searchQuery.toLowerCase())
     )
   }, [conversations, searchQuery])
-  
+
   // Get selected conversation or create a virtual one for new conversations
   const selectedConv = useMemo(() => {
     if (!selectedConversation || !currentUser) return null
-    
+
     // Try to find existing conversation
-    const existing = conversations.find(conv => 
+    const existing = conversations.find(conv =>
       `${conv.projectId}::${conv.otherUser.id}` === selectedConversation
     )
-    
+
     if (existing) return existing
-    
+
     // Create virtual conversation for new chats
     const [projectId, userId] = selectedConversation.split('::')
     const project = projects.find(p => p.id === projectId)
     const otherUser = users.find(u => u.id === userId)
-    
+
     if (project && otherUser) {
       return {
         projectId,
@@ -211,10 +209,10 @@ export default function MessagesPage() {
         lastMessage: undefined
       }
     }
-    
+
     return null
   }, [selectedConversation, conversations, projects, users, currentUser])
-  
+
   // Poll for new messages every 5 seconds when a conversation is selected
   useEffect(() => {
     if (!selectedConv || !currentUser) return
@@ -232,7 +230,7 @@ export default function MessagesPage() {
 
     return () => clearInterval(interval)
   }, [selectedConv, currentUser, getMessagesByUser])
-  
+
   // Mark messages as read when conversation is selected
   useEffect(() => {
     if (selectedConv && currentUser) {
@@ -242,7 +240,7 @@ export default function MessagesPage() {
           const isUnread = !msg.read
           return isReceiver && isUnread
         })
-      
+
       // Mark messages as read sequentially to avoid race conditions
       const markMessagesSequentially = async () => {
         for (const msg of messagesToMarkAsRead) {
@@ -256,7 +254,7 @@ export default function MessagesPage() {
           }
         }
       }
-      
+
       if (messagesToMarkAsRead.length > 0) {
         markMessagesSequentially()
       }
@@ -269,90 +267,6 @@ export default function MessagesPage() {
   //     joinProjectRoom(selectedConv.projectId)
   //   }
   // }, [selectedConv, joinProjectRoom])
-  
-
-  const handleSendMessage = async () => {
-    if ((!newMessage.trim() && selectedFiles.length === 0) || !selectedConv || !currentUser) return
-    
-    try {
-      setUploading(true)
-      let attachments: any[] = []
-      
-      // Upload files if any are selected
-      if (selectedFiles.length > 0) {
-        const formData = new FormData()
-        selectedFiles.forEach(file => {
-          formData.append('files', file)
-        })
-        
-        const uploadResponse = await fetch('/api/messages/upload', {
-          method: 'POST',
-          body: formData,
-        })
-        
-        if (!uploadResponse.ok) {
-          const error = await uploadResponse.json()
-          throw new Error(error.error || 'Failed to upload files')
-        }
-        
-        const uploadResult = await uploadResponse.json()
-        attachments = uploadResult.files || []
-        
-        // Validate that all files were uploaded successfully
-        if (attachments.length !== selectedFiles.length) {
-          throw new Error(`Only ${attachments.length} of ${selectedFiles.length} files were uploaded successfully`)
-        }
-      }
-      
-      const messageData = {
-        projectId: selectedConv.projectId,
-        receiverId: selectedConv.otherUser.id,
-        text: newMessage.trim(),
-        attachments
-      }
-      
-      // Send via API (this will add to local state automatically)
-      await sendMessage(messageData)
-      
-      // Send via socket for real-time delivery (disabled for now)
-      // const socketMessage = {
-      //   ...sentMessage,
-      //   attachments: attachments || []
-      // }
-      // socketSendMessage(socketMessage)
-      
-      // Immediately refresh messages to ensure UI is updated
-      await getMessagesByUser(currentUser.id)
-      
-      setNewMessage("")
-      setSelectedFiles([])
-      
-      toast({
-        title: "Message sent!",
-        description: attachments.length > 0 
-          ? `Message sent with ${attachments.length} attachment(s)`
-          : "Message sent successfully",
-      })
-      
-    } catch (error) {
-      console.error('Failed to send message:', error)
-      toast({
-        title: "Failed to send message",
-        description: error instanceof Error ? error.message : "Please try again",
-        variant: "destructive",
-      })
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleFileSelect = (files: File[]) => {
-    setSelectedFiles(prev => [...prev, ...files])
-  }
-
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
-  }
 
   // Handle conversation selection for mobile
   const handleConversationSelect = (conversationKey: string) => {
@@ -366,95 +280,8 @@ export default function MessagesPage() {
     setShowConversationsList(true)
   }
 
-  const handleDownloadAttachment = async (attachment: MessageAttachment) => {
-    try {
-      // Check if it's a Cloudinary URL or local URL
-      const isCloudinaryUrl = attachment.url.includes('cloudinary.com') || attachment.url.startsWith('https://res.cloudinary.com')
-      
-      if (!isCloudinaryUrl && attachment.url.startsWith('/uploads/')) {
-        // This is an old local file path that no longer exists
-        toast({
-          title: "File not available",
-          description: "This file was uploaded before our system upgrade and is no longer available for download.",
-          variant: "destructive",
-        })
-        return
-      }
-      
-      // Show loading toast for better UX
-      const loadingToast = toast({
-        title: "Downloading...",
-        description: `Preparing ${attachment.originalName} for download`,
-      })
-      
-      const response = await fetch(attachment.url, {
-        method: 'GET',
-        headers: {
-          'Accept': '*/*',
-        },
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const blob = await response.blob()
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = attachment.originalName || `download.${attachment.fileType.split('/')[1] || 'bin'}`
-      a.style.display = 'none'
-      document.body.appendChild(a)
-      a.click()
-      
-      // Clean up
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      }, 100)
-      
-      // Dismiss loading toast and show success
-      loadingToast.dismiss?.()
-      toast({
-        title: "Download complete",
-        description: `${attachment.originalName} has been downloaded successfully`,
-      })
-      
-    } catch (error) {
-      console.error('Failed to download file:', error)
-      
-      // Provide more specific error messages
-      let errorMessage = "Failed to download the file. The file may no longer be available."
-      
-      if (error instanceof Error) {
-        if (error.message.includes('404')) {
-          errorMessage = "File not found. This file may have been deleted or moved."
-        } else if (error.message.includes('403')) {
-          errorMessage = "Access denied. You don't have permission to download this file."
-        } else if (error.message.includes('Network')) {
-          errorMessage = "Network error. Please check your internet connection and try again."
-        }
-      }
-      
-      toast({
-        title: "Download failed",
-        description: errorMessage,
-        variant: "destructive",
-      })
-    }
-  }
-  
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && selectedFiles.length === 0) {
-      e.preventDefault()
-      handleSendMessage()
-    }
-  }
-  
   if (!currentUser) return null
-  
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -465,7 +292,7 @@ export default function MessagesPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="fixed top-16 left-0 right-0 bottom-0 lg:relative lg:top-auto lg:left-auto lg:right-auto lg:bottom-auto lg:h-auto flex flex-col lg:container lg:mx-auto lg:px-4 lg:py-8">
       {/* Header - Only show on desktop or when conversations list is visible on mobile */}
@@ -479,15 +306,15 @@ export default function MessagesPage() {
           </div>
         </div>
       </div>
-      
+
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 lg:gap-6 h-full lg:h-[calc(100vh-200px)] overflow-hidden">
         {/* Conversations List - Show/hide based on mobile state */}
         <Card className={`lg:col-span-1 h-full flex flex-col ${!showConversationsList ? 'hidden lg:flex' : ''} border-0 lg:border rounded-none lg:rounded-lg`}>
           <CardHeader className="pb-4 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Conversations</CardTitle>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
                 onClick={() => {
                   // For contractors, go to subcontractors page
@@ -518,13 +345,12 @@ export default function MessagesPage() {
                 <div className="space-y-1">
                   {filteredConversations.map((conversation) => {
                     const isSelected = `${conversation.projectId}::${conversation.otherUser.id}` === selectedConversation
-                    
+
                     return (
                       <div
                         key={`${conversation.projectId}::${conversation.otherUser.id}`}
-                        className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
-                          isSelected ? 'bg-muted border-r-2 border-primary' : ''
-                        }`}
+                        className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${isSelected ? 'bg-muted border-r-2 border-primary' : ''
+                          }`}
                         onClick={() => handleConversationSelect(`${conversation.projectId}::${conversation.otherUser.id}`)}
                       >
                         <div className="flex items-start gap-3">
@@ -577,127 +403,25 @@ export default function MessagesPage() {
             </ScrollArea>
           </CardContent>
         </Card>
-        
+
         {/* Chat Area - Show/hide based on mobile state */}
-        <div className={`lg:col-span-2 h-full flex flex-col ${showConversationsList ? 'hidden lg:flex' : ''} bg-background lg:bg-card lg:border lg:rounded-lg overflow-hidden`}>
+        <div className={`lg:col-span-2 h-full flex flex-col ${showConversationsList ? 'hidden lg:flex' : ''} bg-background lg:bg-card overflow-hidden`}>
           {selectedConv ? (
-            <>
-              {/* Chat Header with Back Button for Mobile - Fixed at top */}
-              <div className="flex-shrink-0 p-4 border-b bg-background lg:bg-card">
-                <div className="flex items-center gap-3">
-                  {/* Back button for mobile */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="lg:hidden"
-                    onClick={handleBackToConversations}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback>
-                      {selectedConv.otherUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h2 className="text-lg font-semibold">{selectedConv.otherUser.name}</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Project: {selectedConv.project.title}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Messages Area - Only this scrolls */}
-              <div className="flex-1 overflow-hidden">
-                <div className="h-full overflow-y-auto">
-                  <div className="p-4 space-y-4 min-h-full">
-                    {selectedConv.messages
-                      .filter((message, index, array) => 
-                        array.findIndex(m => m.id === message.id) === index
-                      )
-                      .map((message, index) => {
-                        const isOwn = message.senderId === currentUser.id
-                        
-                        return (
-                          <div
-                            key={`${message.id}-${index}`}
-                            className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div className={`max-w-[85%] sm:max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
-                              <div
-                                className={`rounded-lg px-4 py-2 ${
-                                  isOwn
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-foreground'
-                                }`}
-                              >
-                                {message.text && <p className="text-sm">{message.text}</p>}
-                                
-                                {/* Display attachments */}
-                                <AttachmentDisplay 
-                                  attachments={message.attachments || []}
-                                  onDownload={handleDownloadAttachment}
-                                />
-                              </div>
-                              <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                                <Clock className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">
-                                  {message.sentAt ? formatDistanceToNow(new Date(message.sentAt), { addSuffix: true }) : 'Unknown time'}
-                                </span>
-                                {isOwn && message.read && (
-                                  <CheckCheck className="h-3 w-3 text-muted-foreground ml-1" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Message Input - Fixed at bottom, never scrolls */}
-              <div className="flex-shrink-0 border-t bg-background lg:bg-card">
-                <div className="p-4 space-y-3">
-                  {/* File Upload */}
-                  <MessageFileUpload
-                    onFileSelect={handleFileSelect}
-                    selectedFiles={selectedFiles}
-                    onRemoveFile={handleRemoveFile}
-                    disabled={uploading}
-                  />
-                  
-                  {/* Text Input */}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type your message..."
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyDown={handleKeyPress}
-                      className="flex-1"
-                      disabled={uploading}
-                    />
-                    <Button 
-                      onClick={handleSendMessage}
-                      disabled={(!newMessage.trim() && selectedFiles.length === 0) || uploading}
-                      size="sm"
-                    >
-                      <Send className="h-4 w-4" />
-                      {uploading && <span className="ml-2">Sending...</span>}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </>
+            <ChatRoom
+              projectId={selectedConv.projectId}
+              recipientId={selectedConv.otherUser.id}
+              recipientName={selectedConv.otherUser.name}
+              onBack={handleBackToConversations}
+              className="h-full border-0 lg:border rounded-none lg:rounded-lg"
+            />
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <Card className="flex items-center justify-center h-full border-0 lg:border rounded-none lg:rounded-lg">
               <div className="text-center text-muted-foreground">
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-medium mb-2">Select a conversation</h3>
                 <p>Choose a conversation from the list to start messaging</p>
               </div>
-            </div>
+            </Card>
           )}
         </div>
       </div>

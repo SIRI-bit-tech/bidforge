@@ -10,8 +10,9 @@ import { StatusBadge } from "@/components/status-badge"
 import { DocumentUpload } from "@/components/document-upload"
 import { DocumentViewer } from "@/components/document-viewer"
 import { formatCurrency, formatDate, formatTimeUntil, getTradeLabel } from "@/lib/utils/format"
-import { ArrowLeft, MapPin, DollarSign, Calendar, Clock, Users, FileText } from "lucide-react"
+import { ArrowLeft, MapPin, DollarSign, Calendar, Clock, Users, FileText, Info } from "lucide-react"
 import Link from "next/link"
+import { ProjectTimelinePopover } from "@/components/project-timeline-popover"
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -27,7 +28,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const loadData = async () => {
       try {
         await loadProjects()
-        
+
         // Load bids for this project
         if (currentUser) {
           const bids = await loadBids(id)
@@ -39,12 +40,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         setLoading(false)
       }
     }
-    
+
     loadData()
   }, [loadProjects, loadBids, id, currentUser])
 
   const project = projects.find((p) => p.id === id)
-  
+
   // Check if current user is the project owner
   const isProjectOwner = currentUser && project && (project.createdBy === currentUser.id || project.createdById === currentUser.id)
   const isSubcontractor = currentUser?.role === 'SUBCONTRACTOR'
@@ -83,8 +84,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div className="min-h-screen">
       <div className="mb-6 lg:mb-8">
-        <Link 
-          href={isSubcontractor ? "/opportunities" : "/projects"} 
+        <Link
+          href={isSubcontractor ? "/opportunities" : "/projects"}
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -147,29 +148,33 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="truncate">
-                  Budget: {(project as any).budgetMin && (project as any).budgetMax 
+                  Budget: {(project as any).budgetMin && (project as any).budgetMax
                     ? `${formatCurrency(Number((project as any).budgetMin))} - ${formatCurrency(Number((project as any).budgetMax))}`
-                    : project.budget 
-                    ? formatCurrency(project.budget)
-                    : 'Not specified'
+                    : project.budget
+                      ? formatCurrency(project.budget)
+                      : 'Not specified'
                   }
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="truncate">
-                  {project.startDate && project.endDate 
-                    ? `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
-                    : 'Dates not specified'
-                  }
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className={`truncate ${new Date(project.deadline) < new Date() ? "text-destructive" : "text-warning"}`}>
-                  Deadline: {timeRemaining}
-                </span>
-              </div>
+              <ProjectTimelinePopover project={project}>
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate">
+                    {project.startDate && project.endDate
+                      ? `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
+                      : 'Dates not specified'
+                    }
+                  </span>
+                </div>
+              </ProjectTimelinePopover>
+              <ProjectTimelinePopover project={project}>
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className={`truncate ${new Date(project.deadline) < new Date() ? "text-destructive" : "text-warning"}`}>
+                    Deadline: {timeRemaining} <span className="text-muted-foreground">({formatDate(project.deadline)})</span>
+                  </span>
+                </div>
+              </ProjectTimelinePopover>
             </div>
 
             <div>
@@ -225,16 +230,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 icon={Users}
                 title={isProjectOwner ? "No bids yet" : "No bids submitted"}
                 description={
-                  isProjectOwner 
+                  isProjectOwner
                     ? "Invite subcontractors to start receiving bids for this project"
                     : "This project hasn't received any bids yet"
                 }
                 action={
-                  isProjectOwner 
+                  isProjectOwner
                     ? {
-                        label: "Invite Subcontractors",
-                        onClick: () => router.push("/subcontractors"),
-                      }
+                      label: "Invite Subcontractors",
+                      onClick: () => router.push("/subcontractors"),
+                    }
                     : undefined
                 }
               />
@@ -259,29 +264,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <Users className="h-4 w-4 mr-2" />
                     Invite Subcontractors
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start bg-transparent"
                     onClick={() => setUploadModalOpen(true)}
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     Upload Documents
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start bg-transparent"
                     onClick={() => setViewDocumentsOpen(true)}
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     View Documents
                   </Button>
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    View Timeline
-                  </Button>
+                  <ProjectTimelinePopover project={project}>
+                    <Button variant="outline" className="w-full justify-start bg-transparent">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      View Timeline
+                    </Button>
+                  </ProjectTimelinePopover>
                 </>
               )}
-              
+
               {/* Subcontractor actions */}
               {isSubcontractor && (
                 <>
@@ -294,8 +301,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       Submit Bid
                     </Button>
                   )}
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start bg-transparent"
                     onClick={() => {
                       // Navigate to messages with pre-selected conversation
@@ -306,25 +313,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <Users className="h-4 w-4 mr-2" />
                     Contact Contractor
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start bg-transparent"
                     onClick={() => setViewDocumentsOpen(true)}
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     View Documents
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start bg-transparent"
-                    onClick={() => {
-                      // Navigate to project timeline page (to be implemented)
-                      router.push(`/projects/${project.id}/timeline`)
-                    }}
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    View Timeline
-                  </Button>
+                  <ProjectTimelinePopover project={project}>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start bg-transparent"
+                    >
+                      <Calendar className="h-4 w-4 mr-2" />
+                      View Timeline
+                    </Button>
+                  </ProjectTimelinePopover>
                 </>
               )}
             </div>

@@ -57,6 +57,8 @@ export interface Company {
   logo?: string
   trades: TradeCategory[]
   certifications: Certification[]
+  plan: "FREE" | "PRO" | "ENTERPRISE"
+  subscriptionStatus: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INACTIVE"
   createdAt: Date
 }
 

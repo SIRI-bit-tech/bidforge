@@ -48,6 +48,8 @@ export const companies = pgTable("companies", {
   website: varchar("website", { length: 255 }),
   description: text("description"),
   logo: text("logo"),
+  plan: text("plan").default("FREE").notNull(),
+  subscriptionStatus: text("subscription_status").default("INACTIVE").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })

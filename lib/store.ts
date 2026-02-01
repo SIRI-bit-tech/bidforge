@@ -102,6 +102,9 @@ interface AppState {
   getNotificationsByUser: (userId: string) => Notification[]
   markNotificationAsRead: (id: string) => void
   markAllNotificationsAsRead: (userId: string) => void
+
+  // Plan actions
+  upgradePlan: (companyId: string, plan: "FREE" | "PRO" | "ENTERPRISE") => void
 }
 
 // Helper function to generate IDs
@@ -274,7 +277,7 @@ export const useStore = create<AppState>((set, get) => ({
       // Logout API call failed
       // Continue with local logout even if API fails
     }
-    
+
     set({ currentUser: null, isAuthenticated: false })
   },
 
@@ -319,7 +322,7 @@ export const useStore = create<AppState>((set, get) => ({
       // For subcontractors without company, only load contractors
       const currentUser = get().currentUser
       let endpoint = '/api/users'
-      
+
       if (currentUser && !currentUser.companyId) {
         if (currentUser.role === 'CONTRACTOR') {
           endpoint = '/api/users?role=SUBCONTRACTOR'
@@ -327,10 +330,10 @@ export const useStore = create<AppState>((set, get) => ({
           endpoint = '/api/users?role=CONTRACTOR'
         }
       }
-        
+
       const response = await fetch(endpoint)
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load users')
       }
@@ -353,7 +356,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const response = await fetch('/api/companies')
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load companies')
       }
@@ -376,7 +379,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const response = await fetch('/api/projects')
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load projects')
       }
@@ -402,7 +405,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const response = await fetch('/api/users?role=SUBCONTRACTOR')
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load subcontractors')
       }
@@ -441,6 +444,8 @@ export const useStore = create<AppState>((set, get) => ({
       logo: data.logo,
       trades: data.trades || [],
       certifications: data.certifications || [],
+      plan: "FREE",
+      subscriptionStatus: "INACTIVE",
       createdAt: new Date(),
     }
     set((state) => ({ companies: [...state.companies, newCompany] }))
@@ -466,20 +471,20 @@ export const useStore = create<AppState>((set, get) => ({
   searchSubcontractors: (query: string, tradeIds?: string[]) => {
     const subcontractors = get().getSubcontractors()
     const companies = get().companies
-    
+
     return subcontractors.filter((user) => {
       const company = companies.find((c) => c.id === user.companyId)
-      
+
       // Text search in name, company name, or description
-      const matchesText = query === "" || 
+      const matchesText = query === "" ||
         user.name.toLowerCase().includes(query.toLowerCase()) ||
         (company?.name?.toLowerCase().includes(query.toLowerCase())) ||
         (company?.description?.toLowerCase().includes(query.toLowerCase()))
-      
+
       // Trade filter - for now, skip trade filtering if no company trades are loaded
-      const matchesTrades = !tradeIds || tradeIds.length === 0 || 
+      const matchesTrades = !tradeIds || tradeIds.length === 0 ||
         (company?.trades?.some(trade => tradeIds.includes(trade)))
-      
+
       return matchesText && matchesTrades
     })
   },
@@ -487,7 +492,7 @@ export const useStore = create<AppState>((set, get) => ({
   getSubcontractorsByTrade: (tradeId: string) => {
     const subcontractors = get().getSubcontractors()
     const companies = get().companies
-    
+
     return subcontractors.filter((user) => {
       const company = companies.find((c) => c.id === user.companyId)
       return company?.trades.includes(tradeId as any)
@@ -497,9 +502,9 @@ export const useStore = create<AppState>((set, get) => ({
   getSubcontractorProfile: (userId: string) => {
     const user = get().users.find((u) => u.id === userId && u.role === "SUBCONTRACTOR")
     if (!user) return null
-    
+
     const company = user.companyId ? get().getCompany(user.companyId) : undefined
-    
+
     return { user, company }
   },
 
@@ -664,7 +669,7 @@ export const useStore = create<AppState>((set, get) => ({
       const url = projectId ? `/api/bids?projectId=${projectId}` : '/api/bids'
       const response = await fetch(url)
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load bids')
       }
@@ -679,7 +684,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Update local state with loaded bids
       set((state) => ({
-        bids: projectId 
+        bids: projectId
           ? [...state.bids.filter(b => b.projectId !== projectId), ...bids]
           : bids
       }))
@@ -718,8 +723,8 @@ export const useStore = create<AppState>((set, get) => ({
         respondedAt: invitation.respondedAt ? new Date(invitation.respondedAt) : undefined,
       }))
 
-      set((state) => ({ 
-        invitations: [...state.invitations, ...newInvitations] 
+      set((state) => ({
+        invitations: [...state.invitations, ...newInvitations]
       }))
 
       // Create notifications for invited subcontractors
@@ -860,7 +865,7 @@ export const useStore = create<AppState>((set, get) => ({
       ...result.message,
       sentAt: new Date(result.message.sentAt),
     }
-    
+
     set((state) => ({ messages: [...state.messages, newMessage] }))
 
     // Create notification
@@ -925,13 +930,13 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (!response.ok) {
         const result = await response.json()
-        
+
         // If it's a 403 error, it means the user is not authorized to mark this message as read
         // This could happen if they're trying to mark a message they sent (not received)
         if (response.status === 403) {
           return // Don't throw error, just skip
         }
-        
+
         throw new Error(result.error || 'Failed to mark message as read')
       }
 
@@ -952,7 +957,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (messageExists) {
         return state // Don't add duplicate
       }
-      
+
       return { messages: [...state.messages, message] }
     })
   },
@@ -980,7 +985,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (notificationExists) {
         return state // Don't add duplicate
       }
-      
+
       return { notifications: [notification, ...state.notifications] }
     })
   },
@@ -1018,7 +1023,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({
       notifications: state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
     }))
-    
+
     // Also update on server
     fetch(`/api/notifications/${id}/read`, {
       method: 'PATCH',
@@ -1032,7 +1037,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({
       notifications: state.notifications.map((n) => (n.userId === userId ? { ...n, read: true } : n)),
     }))
-    
+
     // Also update on server
     fetch(`/api/notifications/mark-all-read`, {
       method: 'PATCH',
@@ -1042,6 +1047,34 @@ export const useStore = create<AppState>((set, get) => ({
       body: JSON.stringify({ userId }),
     }).catch(error => {
       // Failed to mark all notifications as read on server
+    })
+  },
+
+  upgradePlan: (companyId: string, plan: "FREE" | "PRO" | "ENTERPRISE") => {
+    set((state) => ({
+      companies: state.companies.map((c) =>
+        c.id === companyId
+          ? { ...c, plan, subscriptionStatus: "ACTIVE" }
+          : c
+      )
+    }))
+
+    // In production, call the API to update the plan on the server
+    fetch(`/api/companies/${companyId}/plan`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ plan }),
+    }).then(async response => {
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update plan on server')
+      }
+      console.log(`Plan upgraded successfully on server: ${plan}`)
+    }).catch(error => {
+      console.error('Error upgrading plan on server:', error)
+      // Optionally revert local state or show an error toast here
     })
   },
 }))

@@ -2,11 +2,16 @@
 
 import { useStore } from "@/lib/store"
 import { StatsCard } from "@/components/stats-card"
-import { BarChart3, TrendingUp, Target, Clock } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/format"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
+import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
+import { Lock, BarChart3, TrendingUp, Target, Clock } from "lucide-react"
 
 export default function AnalyticsPage() {
   const { currentUser, projects, bids, getBidsByProject, getBidsBySubcontractor, getProjectsByUser } = useStore()
+  const { userPlan } = usePlanLimits()
+  const router = useRouter()
 
   if (!currentUser) return null
 
@@ -118,6 +123,41 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {userPlan === "FREE" && (
+        <div className="absolute inset-x-0 bottom-0 top-[140px] z-50 flex items-center justify-center p-8">
+          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px]" />
+          <div className="relative max-w-md w-full bg-card border border-border rounded-2xl p-8 shadow-2xl text-center space-y-6">
+            <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <Lock className="h-8 w-8" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold">Advanced Analytics Locked</h2>
+              <p className="text-muted-foreground">
+                Upgrade to Pro to unlock deep insights, market trends, and performance metrics for your business.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={() => router.push("/pricing")}
+                className="w-full bg-accent hover:bg-accent-hover text-white h-12"
+              >
+                Upgrade to Pro
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/dashboard")}
+                className="w-full"
+              >
+                Go back to Dashboard
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+              Trusted by 500+ professionals
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

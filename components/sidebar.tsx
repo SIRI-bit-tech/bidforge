@@ -2,19 +2,24 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings, Zap } from "lucide-react"
 
 export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname()
-  const { currentUser, messages } = useStore()
+  const router = useRouter()
+  const { currentUser, messages, companies } = useStore()
+
+  const company = companies.find((c) => c.id === currentUser?.companyId)
 
   if (!currentUser) return null
 
   // Count unread messages
-  const unreadCount = messages.filter(msg => 
+  const unreadCount = messages.filter(msg =>
     msg.receiverId === currentUser.id && !msg.read
   ).length
 
@@ -39,8 +44,8 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
 
   const links = currentUser.role === "CONTRACTOR" ? contractorLinks : subcontractorLinks
 
-  const sidebarClasses = mobile 
-    ? "flex w-full flex-col" 
+  const sidebarClasses = mobile
+    ? "flex w-full flex-col"
     : "hidden lg:flex w-64 flex-col border-r border-border bg-muted/30"
 
   return (
@@ -64,8 +69,8 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
                 <Icon className="h-5 w-5" />
                 {link.label}
                 {showBadge && (
-                  <Badge 
-                    variant="destructive" 
+                  <Badge
+                    variant="destructive"
                     className="ml-auto h-5 min-w-5 flex items-center justify-center text-xs px-1"
                   >
                     {unreadCount}
@@ -75,6 +80,37 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
             )
           })}
         </nav>
+      </div>
+
+      <div className="p-4 border-t border-border">
+        {company && company.plan === "FREE" ? (
+          <div className="rounded-xl bg-accent/10 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-accent">
+              <Zap className="h-4 w-4 fill-current" />
+              <span className="text-xs font-bold uppercase tracking-wider">Free Plan</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-tight">
+              Upgrade to Pro to unlock unlimited projects and advanced bid tools.
+            </p>
+            <Button
+              size="sm"
+              className="w-full bg-accent hover:bg-accent-hover text-white text-xs h-8"
+              onClick={() => router.push("/pricing")}
+            >
+              Upgrade Now
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-muted p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-accent fill-current" />
+              <span className="text-xs font-bold uppercase">{company?.plan} Plan</span>
+            </div>
+            <Link href="/pricing" className="text-[10px] text-muted-foreground hover:text-foreground underline">
+              Manage
+            </Link>
+          </div>
+        )}
       </div>
     </aside>
   )

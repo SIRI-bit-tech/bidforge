@@ -83,34 +83,36 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
       </div>
 
       <div className="p-4 border-t border-border">
-        {company && company.plan === "FREE" ? (
-          <div className="rounded-xl bg-accent/10 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-accent">
-              <Zap className="h-4 w-4 fill-current" />
-              <span className="text-xs font-bold uppercase tracking-wider">Free Plan</span>
+        {company ? (
+          company.plan === "FREE" ? (
+            <div className="rounded-xl bg-accent/10 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-accent">
+                <Zap className="h-4 w-4 fill-current" />
+                <span className="text-xs font-bold uppercase tracking-wider">Free Plan</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-tight">
+                Upgrade to Pro to unlock unlimited projects and advanced bid tools.
+              </p>
+              <Button
+                size="sm"
+                className="w-full bg-accent hover:bg-accent-hover text-white text-xs h-8"
+                onClick={() => router.push("/pricing")}
+              >
+                Upgrade Now
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground leading-tight">
-              Upgrade to Pro to unlock unlimited projects and advanced bid tools.
-            </p>
-            <Button
-              size="sm"
-              className="w-full bg-accent hover:bg-accent-hover text-white text-xs h-8"
-              onClick={() => router.push("/pricing")}
-            >
-              Upgrade Now
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-xl bg-muted p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-accent fill-current" />
-              <span className="text-xs font-bold uppercase">{company?.plan} Plan</span>
+          ) : (
+            <div className="rounded-xl bg-muted p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-accent fill-current" />
+                <span className="text-xs font-bold uppercase">{company.plan} Plan</span>
+              </div>
+              <Link href="/pricing" className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                Manage
+              </Link>
             </div>
-            <Link href="/pricing" className="text-[10px] text-muted-foreground hover:text-foreground underline">
-              Manage
-            </Link>
-          </div>
-        )}
+          )
+        ) : null}
       </div>
     </aside>
   )

@@ -446,6 +446,8 @@ export const useStore = create<AppState>((set, get) => ({
       certifications: data.certifications || [],
       plan: "FREE",
       subscriptionStatus: "INACTIVE",
+      storageUsed: 0,
+      verified: false,
       createdAt: new Date(),
     }
     set((state) => ({ companies: [...state.companies, newCompany] }))
@@ -1051,6 +1053,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   upgradePlan: (companyId: string, plan: "FREE" | "PRO" | "ENTERPRISE") => {
+    // Capture previous state for rollback
+    const previousCompanies = get().companies
+
     set((state) => ({
       companies: state.companies.map((c) =>
         c.id === companyId
@@ -1074,7 +1079,8 @@ export const useStore = create<AppState>((set, get) => ({
       console.log(`Plan upgraded successfully on server: ${plan}`)
     }).catch(error => {
       console.error('Error upgrading plan on server:', error)
-      // Optionally revert local state or show an error toast here
+      // Revert local state on error
+      set({ companies: previousCompanies })
     })
   },
 }))

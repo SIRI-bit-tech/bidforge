@@ -3,12 +3,14 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Check, ArrowRight, Shield, Zap, Building2, HardHat } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function PricingPage() {
     const router = useRouter()
+    const { toast } = useToast()
     const { currentUser, companies, upgradePlan } = useStore()
     const [role, setRole] = useState<"CONTRACTOR" | "SUBCONTRACTOR">(
         currentUser?.role || "CONTRACTOR"
@@ -17,9 +19,16 @@ export default function PricingPage() {
     const company = companies.find((c) => c.id === currentUser?.companyId)
 
     const handleSubscribe = (plan: "FREE" | "PRO" | "ENTERPRISE") => {
-        if (company) {
-            upgradePlan(company.id, plan)
+        if (!currentUser || !company) {
+            toast({
+                title: "Authentication Required",
+                description: "You must be logged in and part of a company to subscribe.",
+                variant: "destructive",
+            })
+            return
         }
+
+        upgradePlan(company.id, plan)
         router.push("/dashboard")
     }
 
@@ -197,7 +206,7 @@ export default function PricingPage() {
                                         p.popular && "bg-accent hover:bg-accent-hover text-white",
                                         isCurrent && "border-success text-success bg-success/5 hover:bg-success/10"
                                     )}
-                                    disabled={isCurrent}
+                                    disabled={isCurrent || !currentUser || !company}
                                 >
                                     {isCurrent ? "Current Plan" : p.cta}
                                 </Button>

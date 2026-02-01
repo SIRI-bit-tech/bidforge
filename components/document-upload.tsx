@@ -42,36 +42,36 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
-    
+
     // Validate file sizes (10MB limit per file)
     const maxSize = 10 * 1024 * 1024 // 10MB in bytes
     const oversizedFiles = files.filter(file => file.size > maxSize)
-    
+
     if (oversizedFiles.length > 0) {
       setUploadStatus('error')
       setErrorMessage(`Some files are too large. Maximum size is 10MB per file. Oversized files: ${oversizedFiles.map(f => f.name).join(', ')}`)
       return
     }
-    
+
     // Validate file types
     const allowedTypes = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'image/jpeg',
-      'image/jpg', 
+      'image/jpg',
       'image/png',
       'image/gif'
     ]
-    
+
     const invalidFiles = files.filter(file => !allowedTypes.includes(file.type))
-    
+
     if (invalidFiles.length > 0) {
       setUploadStatus('error')
       setErrorMessage(`Some files have invalid formats. Allowed: PDF, DOC, DOCX, JPG, PNG, GIF. Invalid files: ${invalidFiles.map(f => f.name).join(', ')}`)
       return
     }
-    
+
     setSelectedFiles(files)
     setUploadStatus('idle')
     setErrorMessage("")
@@ -103,7 +103,7 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
       // Upload each file to Cloudinary
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i]
-        
+
         // Upload to Cloudinary with progress tracking
         const cloudinaryResult = await uploadToCloudinaryClient(file, (progress) => {
           // Calculate overall progress across all files
@@ -130,7 +130,8 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
         })
 
         if (!response.ok) {
-          throw new Error('Failed to save document metadata')
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Failed to save document metadata')
         }
 
         const result = await response.json()
@@ -139,7 +140,7 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
 
       setUploadProgress(100)
       setUploadStatus('success')
-      
+
       // Call the completion callback
       if (onUploadComplete) {
         uploadedDocuments.forEach(doc => onUploadComplete(doc))
@@ -187,7 +188,7 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
           {/* File Selection */}
           <div>
             <Label>Select Files</Label>
-            <div 
+            <div
               className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onClick={handleFileSelect}
             >
@@ -296,15 +297,15 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
 
           {/* Actions */}
           <div className="flex gap-2 pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleClose}
               disabled={uploading}
               className="flex-1"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleUpload}
               disabled={selectedFiles.length === 0 || !documentType || uploading}
               className="flex-1 bg-accent hover:bg-accent-hover text-white"

@@ -9,6 +9,7 @@ import { Folder, DollarSign, TrendingUp, Clock, Plus, Inbox } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { formatCurrency } from "@/lib/utils/format"
+import { UsageTracker } from "@/components/usage-tracker"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -105,6 +106,11 @@ export default function DashboardPage() {
             />
           </>
         )}
+      </div>
+
+      {/* Usage Tracker for FREE users */}
+      <div className="mb-8">
+        <UsageTracker />
       </div>
 
       {/* Main Content */}

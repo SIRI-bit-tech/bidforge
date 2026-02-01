@@ -100,7 +100,17 @@ export function ProjectTimelinePopover({ project, children }: ProjectTimelinePop
     return (
       <Drawer>
         <DrawerTrigger asChild>
-          <div className="cursor-pointer hover:bg-muted/50 transition-colors rounded-md -m-1 p-1">
+          <div
+            className="cursor-pointer hover:bg-muted/50 transition-colors rounded-md -m-1 p-1"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                e.currentTarget.click()
+              }
+            }}
+          >
             {children}
           </div>
         </DrawerTrigger>
@@ -122,7 +132,17 @@ export function ProjectTimelinePopover({ project, children }: ProjectTimelinePop
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <div className="cursor-pointer hover:bg-muted/50 transition-colors rounded-md -m-1 p-1">
+        <div
+          className="cursor-pointer hover:bg-muted/50 transition-colors rounded-md -m-1 p-1"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              e.currentTarget.click()
+            }
+          }}
+        >
           {children}
         </div>
       </PopoverTrigger>

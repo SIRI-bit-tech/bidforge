@@ -31,7 +31,7 @@ export default function AnalyticsPage() {
   const avgBidValue = userBids.length > 0 ? totalBidValue / userBids.length : 0
 
   return (
-    <div>
+    <div className="relative">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">Analytics</h1>
         <p className="text-muted-foreground mt-1">Track your performance and insights</p>

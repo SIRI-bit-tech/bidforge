@@ -8,10 +8,12 @@ import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { Plus, Folder } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
 
 export default function ProjectsPage() {
   const router = useRouter()
   const { currentUser, projects, getBidsByProject, loadProjects } = useStore()
+  const { checkLimit } = usePlanLimits()
   const [activeTab, setActiveTab] = useState("all")
   const [loading, setLoading] = useState(true)
 
@@ -26,7 +28,7 @@ export default function ProjectsPage() {
         setLoading(false)
       }
     }
-    
+
     loadData()
   }, [loadProjects])
 
@@ -54,8 +56,12 @@ export default function ProjectsPage() {
           <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Projects</h1>
           <p className="text-sm lg:text-base text-muted-foreground mt-1">Manage all your construction projects</p>
         </div>
-        <Button 
-          onClick={() => router.push("/projects/new")} 
+        <Button
+          onClick={() => {
+            if (checkLimit("CREATE_PROJECT")) {
+              router.push("/projects/new")
+            }
+          }}
           className="w-full lg:w-auto bg-accent hover:bg-accent-hover text-white"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -100,9 +106,13 @@ export default function ProjectsPage() {
           action={
             activeTab === "all"
               ? {
-                  label: "Create Project",
-                  onClick: () => router.push("/projects/new"),
-                }
+                label: "Create Project",
+                onClick: () => {
+                  if (checkLimit("CREATE_PROJECT")) {
+                    router.push("/projects/new")
+                  }
+                },
+              }
               : undefined
           }
         />

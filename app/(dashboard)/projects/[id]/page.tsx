@@ -11,8 +11,11 @@ import { DocumentUpload } from "@/components/document-upload"
 import { DocumentViewer } from "@/components/document-viewer"
 import { formatCurrency, formatDate, formatTimeUntil, getTradeLabel } from "@/lib/utils/format"
 import { ArrowLeft, MapPin, DollarSign, Calendar, Clock, Users, FileText, Info } from "lucide-react"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { ProjectTimelinePopover } from "@/components/project-timeline-popover"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
+import { Lock } from "lucide-react"
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -22,6 +25,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
   const [projectBids, setProjectBids] = useState<any[]>([])
+  const { userPlan } = usePlanLimits()
 
   // Load projects and bids on component mount
   useEffect(() => {
@@ -201,19 +205,53 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <>
                 {/* Only show bid statistics to project owner */}
                 {isProjectOwner && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Average Bid</div>
-                      <div className="text-lg font-bold">{formatCurrency(avgBidAmount)}</div>
+                  <div className="relative overflow-hidden rounded-lg border border-border p-6 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Bid Comparison</h3>
+                      {userPlan === "FREE" && (
+                        <Badge variant="outline" className="text-[10px] bg-accent/5 text-accent border-accent/20">
+                          PRO FEATURE
+                        </Badge>
+                      )}
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Lowest Bid</div>
-                      <div className="text-lg font-bold text-success">{formatCurrency(lowestBid)}</div>
+
+                    <div className={cn(
+                      "grid grid-cols-1 lg:grid-cols-3 gap-4 transition-all duration-300",
+                      userPlan === "FREE" ? "blur-[5px] opacity-40 select-none grayscale" : ""
+                    )}>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1 uppercase">Average Bid</div>
+                        <div className="text-xl font-bold">{formatCurrency(avgBidAmount)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1 uppercase">Lowest Bid</div>
+                        <div className="text-xl font-bold text-success">{formatCurrency(lowestBid)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1 uppercase">Highest Bid</div>
+                        <div className="text-xl font-bold text-destructive">{formatCurrency(highestBid)}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Highest Bid</div>
-                      <div className="text-lg font-bold text-destructive">{formatCurrency(highestBid)}</div>
-                    </div>
+
+                    {userPlan === "FREE" && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/20 backdrop-blur-[1px] p-4 text-center">
+                        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent mb-2">
+                          <Lock className="h-5 w-5" />
+                        </div>
+                        <p className="text-sm font-bold mb-1">Detailed Bid Analysis</p>
+                        <p className="text-[11px] text-muted-foreground mb-3 max-w-[200px]">
+                          Upgrade to Pro to compare all bids side-by-side.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs border-accent text-accent hover:bg-accent hover:text-white"
+                          onClick={() => router.push("/pricing")}
+                        >
+                          Unlock Advanced Tools
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 

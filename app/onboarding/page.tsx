@@ -70,7 +70,7 @@ export default function OnboardingPage() {
       .users.map((u) => (u.id === currentUser.id ? { ...u, companyId: company.id } : u))
     useStore.setState({ users: updatedUsers, currentUser: { ...currentUser, companyId: company.id } })
 
-    router.push("/dashboard")
+    router.push("/pricing")
   }
 
   return (

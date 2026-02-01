@@ -13,6 +13,7 @@ import { getTradeLabel } from "@/lib/utils/format"
 import type { TradeCategory } from "@/lib/types"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
 
 const TRADES: TradeCategory[] = [
   "ELECTRICAL",
@@ -31,6 +32,7 @@ export default function NewProjectPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { currentUser, loadProjects } = useStore()
+  const { checkLimit } = usePlanLimits()
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -51,6 +53,8 @@ export default function NewProjectPage() {
   }
 
   const handleSubmit = async (publish: boolean) => {
+    if (publish && !checkLimit("CREATE_PROJECT")) return
+
     setSaving(true)
 
     try {

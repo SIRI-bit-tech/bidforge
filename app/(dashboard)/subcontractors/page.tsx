@@ -15,13 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Search, MapPin, Phone, Globe, Award, Mail, Calendar, Building } from "lucide-react"
 import { User, Company } from "@/lib/types"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
 
 export default function SubcontractorsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { 
-    getSubcontractors, 
-    searchSubcontractors, 
+  const {
+    getSubcontractors,
+    searchSubcontractors,
     getSubcontractorProfile,
     companies,
     loadSubcontractors,
@@ -32,7 +33,8 @@ export default function SubcontractorsPage() {
     sendMessage,
     currentUser
   } = useStore()
-  
+  const { checkLimit } = usePlanLimits()
+
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTrades, setSelectedTrades] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,7 +47,7 @@ export default function SubcontractorsPage() {
   const [messageModalOpen, setMessageModalOpen] = useState(false)
   const [messageText, setMessageText] = useState("")
   const [sendingMessage, setSendingMessage] = useState(false)
-  
+
   // Load data on component mount
   useEffect(() => {
     const loadData = async () => {
@@ -63,13 +65,13 @@ export default function SubcontractorsPage() {
         setLoading(false)
       }
     }
-    
+
     loadData()
   }, [loadSubcontractors, loadCompanies, loadProjects])
-  
+
   // Get all subcontractors
   const allSubcontractors = getSubcontractors()
-  
+
   // Filter subcontractors based on search and trades
   const filteredSubcontractors = useMemo(() => {
     if (!searchQuery && selectedTrades.length === 0) {
@@ -77,7 +79,7 @@ export default function SubcontractorsPage() {
     }
     return searchSubcontractors(searchQuery, selectedTrades)
   }, [searchQuery, selectedTrades, searchSubcontractors, allSubcontractors])
-  
+
   // Get unique trades from all companies
   const availableTrades = useMemo(() => {
     const trades = new Set<string>()
@@ -86,10 +88,10 @@ export default function SubcontractorsPage() {
     })
     return Array.from(trades)
   }, [companies])
-  
+
   const toggleTrade = (trade: string) => {
-    setSelectedTrades(prev => 
-      prev.includes(trade) 
+    setSelectedTrades(prev =>
+      prev.includes(trade)
         ? prev.filter(t => t !== trade)
         : [...prev, trade]
     )
@@ -104,6 +106,7 @@ export default function SubcontractorsPage() {
   }
 
   const handleInviteToProject = (user: User) => {
+    if (!checkLimit("INVITE_SUBCONTRACTOR")) return
     setSelectedSubcontractor(user)
     setInviteModalOpen(true)
     setSelectedProject("")
@@ -135,12 +138,13 @@ export default function SubcontractorsPage() {
 
   const handleSendMessage = async () => {
     if (!selectedSubcontractor || !messageText.trim() || !currentUser) return
+    if (!checkLimit("SEND_DIRECT_MESSAGE")) return
 
     setSendingMessage(true)
     try {
       // We need a project context for messaging. Let's use the most recent project
       const userProject = projects.find(p => p.createdBy === currentUser.id || p.createdById === currentUser.id)
-      
+
       if (!userProject) {
         toast({
           title: "No Projects Available",
@@ -157,20 +161,20 @@ export default function SubcontractorsPage() {
       }
 
       await sendMessage(messageData)
-      
+
       toast({
         title: "Message Sent Successfully!",
         description: `Your message has been sent to ${selectedSubcontractor.name}`,
       })
-      
+
       // Close modal and navigate to messages
       setMessageModalOpen(false)
       setSelectedSubcontractor(null)
       setMessageText("")
-      
+
       // Navigate to messages with the conversation selected
       router.push(`/messages?project=${userProject.id}&user=${selectedSubcontractor.id}`)
-      
+
     } catch (error) {
       console.error('Failed to send message:', error)
       toast({
@@ -182,11 +186,11 @@ export default function SubcontractorsPage() {
       setSendingMessage(false)
     }
   }
-  
+
   const SubcontractorCard = ({ user }: { user: User }) => {
     const profile = getSubcontractorProfile(user.id)
     const company = profile?.company
-    
+
     return (
       <Card className="hover:shadow-md transition-shadow">
         <CardHeader className="pb-4">
@@ -210,14 +214,14 @@ export default function SubcontractorsPage() {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-4">
           {company?.description && (
             <p className="text-sm text-muted-foreground line-clamp-2">
               {company.description}
             </p>
           )}
-          
+
           {/* Location */}
           {company?.address && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -225,7 +229,7 @@ export default function SubcontractorsPage() {
               <span>{company.address}</span>
             </div>
           )}
-          
+
           {/* Contact */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             {company?.phone && (
@@ -237,9 +241,9 @@ export default function SubcontractorsPage() {
             {company?.website && (
               <div className="flex items-center gap-1">
                 <Globe className="h-4 w-4" />
-                <a 
-                  href={company.website} 
-                  target="_blank" 
+                <a
+                  href={company.website}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:underline"
                 >
@@ -248,7 +252,7 @@ export default function SubcontractorsPage() {
               </div>
             )}
           </div>
-          
+
           {/* Trades */}
           {company?.trades && company.trades.length > 0 && (
             <div>
@@ -267,7 +271,7 @@ export default function SubcontractorsPage() {
               </div>
             </div>
           )}
-          
+
           {/* Certifications */}
           {company?.certifications && company.certifications.length > 0 && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -275,18 +279,18 @@ export default function SubcontractorsPage() {
               <span>{company.certifications.length} certification{company.certifications.length !== 1 ? 's' : ''}</span>
             </div>
           )}
-          
+
           <div className="flex gap-2 pt-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="flex-1"
               onClick={() => handleViewProfile(user)}
             >
               View Profile
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               className="flex-1"
               onClick={() => handleInviteToProject(user)}
               disabled={userProjects.length === 0}
@@ -298,7 +302,7 @@ export default function SubcontractorsPage() {
       </Card>
     )
   }
-  
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -318,8 +322,8 @@ export default function SubcontractorsPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <p className="text-red-600 mb-4">{error}</p>
-            <button 
-              onClick={() => window.location.reload()} 
+            <button
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
             >
               Retry
@@ -329,7 +333,7 @@ export default function SubcontractorsPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -338,7 +342,7 @@ export default function SubcontractorsPage() {
           Browse and connect with qualified subcontractors for your projects
         </p>
       </div>
-      
+
       {/* Search and Filters */}
       <div className="mb-8 space-y-4">
         <div className="relative">
@@ -350,7 +354,7 @@ export default function SubcontractorsPage() {
             className="pl-10"
           />
         </div>
-        
+
         {/* Trade Filters */}
         {availableTrades.length > 0 && (
           <div>
@@ -370,14 +374,14 @@ export default function SubcontractorsPage() {
           </div>
         )}
       </div>
-      
+
       {/* Results */}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {filteredSubcontractors.length} subcontractor{filteredSubcontractors.length !== 1 ? 's' : ''} found
         </p>
       </div>
-      
+
       {/* Subcontractor Grid */}
       {filteredSubcontractors.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -394,8 +398,8 @@ export default function SubcontractorsPage() {
               <p>Try adjusting your search criteria or filters</p>
             </div>
             {(searchQuery || selectedTrades.length > 0) && (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSearchQuery("")
                   setSelectedTrades([])
@@ -407,7 +411,7 @@ export default function SubcontractorsPage() {
           </CardContent>
         </Card>
       )}
-      
+
       {/* Profile Modal */}
       <Dialog open={!!selectedProfile} onOpenChange={() => setSelectedProfile(null)}>
         <DialogContent className="max-w-2xl">
@@ -427,7 +431,7 @@ export default function SubcontractorsPage() {
               </div>
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedProfile && (
             <div className="space-y-6">
               {/* Contact Information */}
@@ -450,9 +454,9 @@ export default function SubcontractorsPage() {
                   {selectedProfile.company?.website && (
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-muted-foreground" />
-                      <a 
-                        href={selectedProfile.company.website} 
-                        target="_blank" 
+                      <a
+                        href={selectedProfile.company.website}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:underline"
                       >
@@ -477,21 +481,21 @@ export default function SubcontractorsPage() {
                         <p className="text-sm">{selectedProfile.company.type}</p>
                       </div>
                     )}
-                    
+
                     {selectedProfile.company.address && (
                       <div>
                         <Label className="text-xs font-medium text-muted-foreground">ADDRESS</Label>
                         <p className="text-sm">{selectedProfile.company.address}</p>
                       </div>
                     )}
-                    
+
                     {selectedProfile.company.description && (
                       <div>
                         <Label className="text-xs font-medium text-muted-foreground">DESCRIPTION</Label>
                         <p className="text-sm">{selectedProfile.company.description}</p>
                       </div>
                     )}
-                    
+
                     {selectedProfile.company.trades && selectedProfile.company.trades.length > 0 && (
                       <div>
                         <Label className="text-xs font-medium text-muted-foreground">SPECIALTIES</Label>
@@ -525,7 +529,7 @@ export default function SubcontractorsPage() {
 
               {/* Message Action */}
               <div className="pt-4 border-t">
-                <Button 
+                <Button
                   className="w-full bg-accent hover:bg-accent-hover text-white"
                   onClick={() => {
                     setSelectedProfile(null)
@@ -552,7 +556,7 @@ export default function SubcontractorsPage() {
               Send an invitation to {selectedSubcontractor?.name} to bid on one of your projects.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {userProjects.length === 0 ? (
               <div className="text-center py-8">
@@ -562,8 +566,8 @@ export default function SubcontractorsPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Create and publish a project first to invite subcontractors.
                 </p>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setInviteModalOpen(false)
                     window.location.href = '/projects'
@@ -589,7 +593,7 @@ export default function SubcontractorsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
                   <Label htmlFor="message">Message (Optional)</Label>
                   <Textarea
@@ -600,16 +604,16 @@ export default function SubcontractorsPage() {
                     rows={4}
                   />
                 </div>
-                
+
                 <div className="flex gap-2 pt-4">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setInviteModalOpen(false)}
                     className="flex-1"
                   >
                     Cancel
                   </Button>
-                  <Button 
+                  <Button
                     onClick={handleSendInvitation}
                     disabled={!selectedProject}
                     className="flex-1"
@@ -632,7 +636,7 @@ export default function SubcontractorsPage() {
               Send a message to {selectedSubcontractor?.name}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <div>
               <Label htmlFor="messageText">Message</Label>
@@ -644,10 +648,10 @@ export default function SubcontractorsPage() {
                 rows={6}
               />
             </div>
-            
+
             <div className="flex gap-2 pt-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setMessageModalOpen(false)
                   setMessageText("")
@@ -656,7 +660,7 @@ export default function SubcontractorsPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleSendMessage}
                 disabled={!messageText.trim() || sendingMessage}
                 className="flex-1 bg-accent hover:bg-accent-hover text-white"

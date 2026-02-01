@@ -11,12 +11,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, DollarSign, FileText, Calendar } from "lucide-react"
 import Link from "next/link"
+import { usePlanLimits } from "@/hooks/use-plan-limits"
 
 export default function SubmitBidPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
   const { projects, currentUser, createBid, loadProjects } = useStore()
+  const { checkLimit } = usePlanLimits()
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
@@ -35,7 +37,7 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
         setLoading(false)
       }
     }
-    
+
     loadData()
   }, [loadProjects])
 
@@ -44,6 +46,7 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!project || !currentUser) return
+    if (!checkLimit("SUBMIT_BID")) return
 
     setSubmitting(true)
     try {
@@ -69,12 +72,12 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
       if (!response.ok) {
         throw new Error(result.error || 'Failed to submit bid')
       }
-      
+
       toast({
         title: "Bid Submitted Successfully!",
         description: "Your bid has been submitted and is now under review.",
       })
-      
+
       // Navigate back to project or to bids page
       router.push(`/my-bids`)
     } catch (error) {
@@ -133,8 +136,8 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
   return (
     <div className="min-h-screen">
       <div className="mb-6 lg:mb-8">
-        <Link 
-          href={`/projects/${id}`} 
+        <Link
+          href={`/projects/${id}`}
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -200,10 +203,10 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
               </div>
 
               <div className="flex flex-col lg:flex-row gap-3 pt-4">
-                <Button 
+                <Button
                   type="button"
-                  variant="outline" 
-                  onClick={() => router.push(`/projects/${id}`)} 
+                  variant="outline"
+                  onClick={() => router.push(`/projects/${id}`)}
                   className="w-full lg:flex-1"
                 >
                   Cancel

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -9,12 +9,21 @@ import { Check, ArrowRight, Shield, Zap, Building2, HardHat } from "lucide-react
 import { cn } from "@/lib/utils"
 
 export default function PricingPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>}>
+            <PricingContent />
+        </Suspense>
+    )
+}
+
+function PricingContent() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const { toast } = useToast()
     const { currentUser, companies, upgradePlan } = useStore()
-    const [role, setRole] = useState<"CONTRACTOR" | "SUBCONTRACTOR">(
-        currentUser?.role || "CONTRACTOR"
-    )
+
+    const isOnboarding = searchParams?.get("onboarding") === "true"
+    const role = currentUser?.role || "CONTRACTOR"
 
     const company = companies.find((c) => c.id === currentUser?.companyId)
 
@@ -138,25 +147,11 @@ export default function PricingPage() {
                         Choose the plan that's right for your business and start building faster.
                     </p>
 
-                    <div className="mt-10 flex justify-center items-center gap-4">
-                        <span className={cn("text-sm font-medium", role === "CONTRACTOR" ? "text-foreground" : "text-muted-foreground")}>
-                            General Contractor
-                        </span>
-                        <button
-                            onClick={() => setRole(role === "CONTRACTOR" ? "SUBCONTRACTOR" : "CONTRACTOR")}
-                            className="relative inline-flex h-6 w-11 items-center rounded-full bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
-                        >
-                            <span
-                                className={cn(
-                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                                    role === "SUBCONTRACTOR" ? "translate-x-6" : "translate-x-1"
-                                )}
-                            />
-                        </button>
-                        <span className={cn("text-sm font-medium", role === "SUBCONTRACTOR" ? "text-foreground" : "text-muted-foreground")}>
-                            Subcontractor
-                        </span>
-                    </div>
+                    {!currentUser && (
+                        <div className="mt-10 flex flex-col items-center gap-4">
+                            <p className="text-sm font-medium text-muted-foreground">Log in to see plans tailored to your role</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-8 mt-16">
@@ -215,15 +210,17 @@ export default function PricingPage() {
                     })}
                 </div>
 
-                <div className="mt-16 text-center">
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.push("/dashboard")}
-                        className="text-muted-foreground hover:text-foreground"
-                    >
-                        Skip for now, continue to dashboard <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </div>
+                {isOnboarding && (
+                    <div className="mt-16 text-center">
+                        <Button
+                            variant="ghost"
+                            onClick={() => router.push("/dashboard")}
+                            className="text-muted-foreground hover:text-foreground"
+                        >
+                            Skip for now, continue to dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </div>
+                )}
 
                 <div className="mt-20 grid md:grid-cols-3 gap-12 border-t border-border pt-20">
                     <div className="space-y-4">

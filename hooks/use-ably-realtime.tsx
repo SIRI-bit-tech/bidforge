@@ -17,8 +17,6 @@ export function useAblyRealtime() {
         const notifChannel = realtimeClient.channels.get(`notifications:${currentUser.id}`)
 
         notifChannel.subscribe("new-notification", (message) => {
-            console.log("🔔 New Real-time Notification:", message.data)
-
             const notification = {
                 ...message.data,
                 createdAt: new Date(message.data.createdAt)
@@ -37,8 +35,6 @@ export function useAblyRealtime() {
         const msgChannel = realtimeClient.channels.get(`messages:${currentUser.id}`)
 
         msgChannel.subscribe("new-message", (message) => {
-            console.log("💬 New Real-time Message Alert:", message.data)
-
             const chatMsg = {
                 ...message.data,
                 sentAt: new Date(message.data.sentAt)

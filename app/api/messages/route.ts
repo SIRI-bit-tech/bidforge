@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, messages, users, projects, bids, notifications } from '@/lib/db'
-import { eq, and, or, desc } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import Ably from 'ably'
 
@@ -12,7 +11,6 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      // Messages fetch attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -21,77 +19,50 @@ export async function GET(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      // Messages fetch attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
       )
     }
 
-    // Use authenticated user's ID for authorization (ignore userId query param)
     const authenticatedUserId = payload.userId
-
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
 
-    // Note: userId query parameter is ignored for security - we only use the authenticated user's ID
-
-    let query = db
-      .select({
-        id: messages.id,
-        projectId: messages.projectId,
-        senderId: messages.senderId,
-        receiverId: messages.receiverId,
-        text: messages.text,
-        attachments: messages.attachments,
-        sentAt: messages.sentAt,
-        read: messages.read,
-        bidId: messages.bidId,
-      })
-      .from(messages)
-      .where(
-        or(
-          eq(messages.senderId, authenticatedUserId),
-          eq(messages.receiverId, authenticatedUserId)
-        )
-      )
-
-    // Filter by project if specified
-    if (projectId) {
-      query = db
-        .select({
-          id: messages.id,
-          projectId: messages.projectId,
-          senderId: messages.senderId,
-          receiverId: messages.receiverId,
-          text: messages.text,
-          attachments: messages.attachments,
-          sentAt: messages.sentAt,
-          read: messages.read,
-          bidId: messages.bidId,
-        })
-        .from(messages)
-        .where(
-          and(
-            or(
-              eq(messages.senderId, authenticatedUserId),
-              eq(messages.receiverId, authenticatedUserId)
-            ),
-            eq(messages.projectId, projectId)
-          )
-        )
-    }
-
-    const userMessages = await query.orderBy(desc(messages.sentAt))
+    const userMessages = await prisma.message.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { senderId: authenticatedUserId },
+              { receiverId: authenticatedUserId }
+            ]
+          },
+          projectId ? { projectId } : {}
+        ]
+      },
+      orderBy: {
+        sentAt: 'desc'
+      },
+      select: {
+        id: true,
+        projectId: true,
+        senderId: true,
+        receiverId: true,
+        text: true,
+        attachments: true,
+        sentAt: true,
+        read: true,
+        bidId: true
+      }
+    })
 
     // Convert timestamps to ISO strings and parse attachments JSON
-    const formattedMessages = userMessages.map(msg => ({
+    const formattedMessages = userMessages.map((msg: any) => ({
       ...msg,
-      sentAt: msg.sentAt.toISOString(),
+      sentAt: msg.sentAt instanceof Date ? msg.sentAt.toISOString() : msg.sentAt,
       attachments: msg.attachments ? JSON.parse(msg.attachments) : []
     }))
-
-    // User fetched messages
 
     return NextResponse.json({ messages: formattedMessages })
   } catch (error) {
@@ -115,7 +86,6 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      // Message send attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -124,19 +94,15 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      // Message send attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
       )
     }
 
-    // Use authenticated user's ID as sender (ignore senderId from request body)
     const authenticatedUserId = payload.userId
-
     const { projectId, receiverId, text, bidId, attachments } = await request.json()
 
-    // Validate input (removed senderId validation since we use authenticated user)
     if (!projectId || !receiverId || (!text && (!attachments || attachments.length === 0))) {
       return NextResponse.json(
         { error: 'Project ID, receiver ID, and either text or attachments are required' },
@@ -145,11 +111,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify project exists
-    const [project] = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId }
+    })
 
     if (!project) {
       return NextResponse.json(
@@ -158,59 +122,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if the session user is allowed to send messages for the given project
-    // Users can send messages if they are:
-    // 1. The project owner (contractor), OR
-    // 2. A subcontractor who has submitted a bid to this project, OR
-    // 3. Part of an existing conversation (can reply to messages they've received)
+    // Check authorization
     const isProjectOwner = project.createdById === authenticatedUserId
-
     let canSendMessage = isProjectOwner
 
     if (!canSendMessage) {
-      // Check if user has submitted a bid to this project (indicating legitimate access)
-      const [userBid] = await db
-        .select({ id: bids.id })
-        .from(bids)
-        .where(
-          and(
-            eq(bids.projectId, projectId),
-            eq(bids.subcontractorId, authenticatedUserId)
-          )
-        )
-        .limit(1)
-
+      const userBid = await prisma.bid.findFirst({
+        where: {
+          projectId,
+          subcontractorId: authenticatedUserId
+        }
+      })
       canSendMessage = !!userBid
     }
 
     if (!canSendMessage) {
-      // Check if user is part of an existing conversation for this project
-      // (can reply to messages they've received or sent)
-      const [existingConversation] = await db
-        .select({ id: messages.id })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.projectId, projectId),
-            or(
-              and(
-                eq(messages.senderId, authenticatedUserId),
-                eq(messages.receiverId, receiverId)
-              ),
-              and(
-                eq(messages.senderId, receiverId),
-                eq(messages.receiverId, authenticatedUserId)
-              )
-            )
-          )
-        )
-        .limit(1)
-
+      const existingConversation = await prisma.message.findFirst({
+        where: {
+          projectId,
+          OR: [
+            { AND: [{ senderId: authenticatedUserId }, { receiverId }] },
+            { AND: [{ senderId: receiverId }, { receiverId: authenticatedUserId }] }
+          ]
+        }
+      })
       canSendMessage = !!existingConversation
     }
 
     if (!canSendMessage) {
-      // User attempted to send message for unauthorized project
       return NextResponse.json(
         { error: 'Access denied. You must be the project owner, have submitted a bid, or be part of an existing conversation to send messages for this project.' },
         { status: 403 }
@@ -218,11 +157,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify receiver exists
-    const [receiver] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, receiverId))
-      .limit(1)
+    const receiver = await prisma.user.findUnique({
+      where: { id: receiverId }
+    })
 
     if (!receiver) {
       return NextResponse.json(
@@ -231,7 +168,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Prevent users from sending messages to themselves
     if (authenticatedUserId === receiverId) {
       return NextResponse.json(
         { error: 'Cannot send message to yourself' },
@@ -239,25 +175,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create message using authenticated user as sender
-    const [newMessage] = await db
-      .insert(messages)
-      .values({
+    // Create message with prisma
+    const newMessage = await prisma.message.create({
+      data: {
         projectId,
-        senderId: authenticatedUserId, // Use authenticated user's ID
+        senderId: authenticatedUserId,
         receiverId,
         text: text?.trim() || '',
         attachments: attachments && attachments.length > 0 ? JSON.stringify(attachments) : null,
         bidId: bidId || null,
         read: false,
         sentAt: new Date(),
-      })
-      .returning()
+      }
+    })
 
-    // Message sent: messageId, projectId, senderId, receiverId, timestamp, hasAttachments
-
-    // Format the message for JSON response
-    // Format the message for JSON response
     const formattedMessage = {
       ...newMessage,
       sentAt: newMessage.sentAt.toISOString(),
@@ -266,29 +197,24 @@ export async function POST(request: NextRequest) {
 
     // --- Ably & Notification Logic ---
     try {
-      // Initialize Ably (ensure ABLY_API_KEY is set in env)
       if (process.env.ABLY_API_KEY) {
         const client = new Ably.Rest(process.env.ABLY_API_KEY)
 
-        // 1. Publish Message for Real-time Chat
         const channelName = `messages:${receiverId}`
         await client.channels.get(channelName).publish('new-message', formattedMessage)
 
-        // 2. Create Persistent Notification
-        const [newNotification] = await db
-          .insert(notifications)
-          .values({
+        const newNotification = await prisma.notification.create({
+          data: {
             userId: receiverId,
             type: 'MESSAGE',
             title: 'New Message',
-            message: `You have a new message from ${project.title}`, // Simplified for brevity
+            message: `You have a new message from ${project.title}`,
             link: `/messages?project=${projectId}&user=${authenticatedUserId}`,
             read: false,
             createdAt: new Date(),
-          })
-          .returning()
+          }
+        })
 
-        // 3. Publish Notification for Real-time Badge/Toast
         const notifChannel = `notifications:${receiverId}`
         await client.channels.get(notifChannel).publish('new-notification', {
           ...newNotification,
@@ -296,10 +222,8 @@ export async function POST(request: NextRequest) {
         })
       }
     } catch (ablyError) {
-      // Don't block response if real-time fails
-      console.error('Ably/Notification error:', ablyError)
+      // Don't block
     }
-    // -------------------------------
 
     return NextResponse.json({ message: formattedMessage }, { status: 201 })
   } catch (error) {

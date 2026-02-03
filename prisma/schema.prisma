@@ -1,0 +1,339 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  CONTRACTOR
+  SUBCONTRACTOR
+  ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  AWARDED
+}
+
+enum BidStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  AWARDED
+  DECLINED
+  WITHDRAWN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum DocumentType {
+  BLUEPRINT
+  SPECIFICATION
+  CONTRACT
+  ADDENDUM
+  PHOTO
+  OTHER
+}
+
+enum CompanyPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INACTIVE
+}
+
+model User {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email            String            @unique @db.VarChar(255)
+  name             String            @db.VarChar(255)
+  passwordHash     String            @map("password_hash")
+  role             UserRole
+  companyId        String?           @map("company_id") @db.Uuid
+  emailVerified    Boolean           @default(false) @map("email_verified")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at")
+  company          Company?          @relation(fields: [companyId], references: [id])
+  projects         Project[]         @relation("CreatedProjects")
+  bids             Bid[]
+  sentMessages     Message[]         @relation("SentMessages")
+  receivedMessages Message[]         @relation("ReceivedMessages")
+  notifications    Notification[]
+  uploadedDocs     Document[]
+  verificationCodes VerificationCode[]
+  invitations      Invitation[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+model Company {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String             @db.VarChar(255)
+  type               String?            @db.VarChar(100)
+  address            String?
+  city               String?            @db.VarChar(100)
+  state              String?            @db.VarChar(50)
+  zip                String?            @db.VarChar(20)
+  phone              String?            @db.VarChar(50)
+  website            String?            @db.VarChar(255)
+  description        String?
+  logo               String?
+  plan               CompanyPlan        @default(FREE)
+  subscriptionStatus SubscriptionStatus @default(INACTIVE) @map("subscription_status")
+  storageUsed        Int                @default(0) @map("storage_used")
+  verified           Boolean            @default(false)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at")
+  users              User[]
+  certifications     Certification[]
+  insurance          Insurance[]
+  trades             CompanyTrade[]
+
+  @@index([plan])
+  @@map("companies")
+}
+
+model Trade {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String         @unique @db.VarChar(100)
+  category    String?        @db.VarChar(100)
+  description String?
+  projects    ProjectTrade[]
+  companies   CompanyTrade[]
+
+  @@index([category])
+  @@map("trades")
+}
+
+model Project {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String         @db.VarChar(255)
+  description String
+  location    String
+  city        String?        @db.VarChar(100)
+  state       String?        @db.VarChar(50)
+  budgetMin   Decimal?       @map("budget_min") @db.Decimal(15, 2)
+  budgetMax   Decimal?       @map("budget_max") @db.Decimal(15, 2)
+  startDate   DateTime?      @map("start_date")
+  endDate     DateTime?      @map("end_date")
+  deadline    DateTime
+  status      ProjectStatus  @default(DRAFT)
+  createdById String         @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
+  createdBy   User           @relation("CreatedProjects", fields: [createdById], references: [id])
+  trades      ProjectTrade[]
+  documents   Document[]
+  bids        Bid[]
+  invitations Invitation[]
+  messages    Message[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([deadline])
+  @@map("projects")
+}
+
+model ProjectTrade {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  tradeId   String  @map("trade_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trade     Trade   @relation(fields: [tradeId], references: [id])
+
+  @@index([projectId])
+  @@index([tradeId])
+  @@map("project_trades")
+}
+
+model Document {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId    String       @map("project_id") @db.Uuid
+  name         String       @db.VarChar(255)
+  type         DocumentType
+  url          String
+  size         Int?
+  version      Int?         @default(1)
+  uploadedById String       @map("uploaded_by_id") @db.Uuid
+  uploadedAt   DateTime     @default(now()) @map("uploaded_at")
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([projectId])
+  @@index([uploadedById])
+  @@map("documents")
+}
+
+model Bid {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId       String      @map("project_id") @db.Uuid
+  subcontractorId String      @map("subcontractor_id") @db.Uuid
+  totalAmount     Decimal     @map("total_amount") @db.Decimal(15, 2)
+  status          BidStatus   @default(DRAFT)
+  notes           String?
+  completionTime  Int?        @map("completion_time")
+  submittedAt     DateTime?   @map("submitted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at")
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subcontractor   User        @relation(fields: [subcontractorId], references: [id])
+  lineItems       LineItem[]
+  alternates      Alternate[]
+  messages        Message[]
+
+  @@index([projectId])
+  @@index([subcontractorId])
+  @@index([status])
+  @@map("bids")
+}
+
+model LineItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bidId       String  @map("bid_id") @db.Uuid
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unit        String  @db.VarChar(50)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  totalPrice  Decimal @map("total_price") @db.Decimal(15, 2)
+  notes       String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+  bid         Bid     @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  @@index([bidId])
+  @@map("line_items")
+}
+
+model Alternate {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bidId            String  @map("bid_id") @db.Uuid
+  description      String
+  adjustmentAmount Decimal @map("adjustment_amount") @db.Decimal(15, 2)
+  notes            String?
+  bid              Bid     @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  @@index([bidId])
+  @@map("alternates")
+}
+
+model Invitation {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId       String           @map("project_id") @db.Uuid
+  subcontractorId String           @map("subcontractor_id") @db.Uuid
+  status          InvitationStatus @default(PENDING)
+  sentAt          DateTime         @default(now()) @map("sent_at")
+  respondedAt     DateTime?        @map("responded_at")
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subcontractor   User             @relation(fields: [subcontractorId], references: [id])
+
+  @@index([projectId])
+  @@index([subcontractorId])
+  @@index([status])
+  @@map("invitations")
+}
+
+model Message {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String?  @map("project_id") @db.Uuid
+  bidId       String?  @map("bid_id") @db.Uuid
+  senderId    String   @map("sender_id") @db.Uuid
+  receiverId  String   @map("receiver_id") @db.Uuid
+  text        String
+  attachments String?
+  read        Boolean? @default(false)
+  sentAt      DateTime @default(now()) @map("sent_at")
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  bid         Bid?     @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([projectId])
+  @@index([senderId, receiverId])
+  @@index([sentAt])
+  @@map("messages")
+}
+
+model Certification {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  type        String    @db.VarChar(100)
+  number      String?   @db.VarChar(100)
+  issueDate   DateTime? @map("issue_date")
+  expiryDate  DateTime? @map("expiry_date")
+  documentUrl String?   @map("document_url")
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("certifications")
+}
+
+model Insurance {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String    @map("company_id") @db.Uuid
+  type         String    @db.VarChar(100)
+  provider     String?   @db.VarChar(255)
+  policyNumber String?   @map("policy_number") @db.VarChar(100)
+  coverage     Decimal?  @db.Decimal(15, 2)
+  expiryDate   DateTime? @map("expiry_date")
+  documentUrl  String?   @map("document_url")
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("insurance")
+}
+
+model Notification {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(255)
+  message   String
+  read      Boolean? @default(false)
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model VerificationCode {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  code      String   @db.VarChar(6)
+  expiresAt DateTime @map("expires_at")
+  used      Boolean? @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("verification_codes")
+}
+
+model CompanyTrade {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String  @map("company_id") @db.Uuid
+  tradeId   String  @map("trade_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trade     Trade   @relation(fields: [tradeId], references: [id])
+
+  @@index([companyId])
+  @@index([tradeId])
+  @@map("company_trades")
+}

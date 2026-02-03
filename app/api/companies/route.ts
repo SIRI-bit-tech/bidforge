@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, companies, companyTrades, trades } from '@/lib/db'
-import { eq, count } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    // Authentication check - mirror other protected endpoints
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
@@ -16,7 +14,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Verify JWT token
     const payload = verifyJWT(token)
     if (!payload) {
       return NextResponse.json(
@@ -25,79 +22,38 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Parse pagination query parameters with sane defaults and max caps
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
-    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20'))) // Max 100, default 20
-    const offset = (page - 1) * pageSize
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')))
+    const skip = (page - 1) * pageSize
 
-    // Get total count for pagination metadata
-    const [totalResult] = await db
-      .select({ count: count() })
-      .from(companies)
+    // Get total count and companies with trades using Prisma
+    const [total, companies] = await prisma.$transaction([
+      prisma.company.count(),
+      prisma.company.findMany({
+        skip,
+        take: pageSize,
+        include: {
+          trades: {
+            include: {
+              trade: true
+            }
+          },
+          certifications: true
+        },
+        orderBy: {
+          name: 'asc'
+        }
+      })
+    ])
 
-    const total = totalResult.count
     const totalPages = Math.ceil(total / pageSize)
 
-    // Get companies with their trades (with pagination)
-    const companiesWithTrades = await db
-      .select({
-        id: companies.id,
-        name: companies.name,
-        type: companies.type,
-        address: companies.address,
-        city: companies.city,
-        state: companies.state,
-        zip: companies.zip,
-        phone: companies.phone,
-        website: companies.website,
-        description: companies.description,
-        logo: companies.logo,
-        createdAt: companies.createdAt,
-        updatedAt: companies.updatedAt,
-        verified: companies.verified,
-        tradeName: trades.name,
-      })
-      .from(companies)
-      .leftJoin(companyTrades, eq(companies.id, companyTrades.companyId))
-      .leftJoin(trades, eq(companyTrades.tradeId, trades.id))
-      .limit(pageSize)
-      .offset(offset)
-
-    // Group trades by company
-    const companiesMap = new Map()
-
-    companiesWithTrades.forEach(row => {
-      if (!companiesMap.has(row.id)) {
-        companiesMap.set(row.id, {
-          id: row.id,
-          name: row.name,
-          type: row.type,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          zip: row.zip,
-          phone: row.phone,
-          website: row.website,
-          description: row.description,
-          logo: row.logo,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          verified: row.verified,
-          trades: [],
-          certifications: [], // TODO: Add certifications if needed
-        })
-      }
-
-      if (row.tradeName) {
-        const company = companiesMap.get(row.id)
-        if (!company.trades.includes(row.tradeName)) {
-          company.trades.push(row.tradeName)
-        }
-      }
-    })
-
-    const result = Array.from(companiesMap.values())
+    // Format the result
+    const result = companies.map((company: any) => ({
+      ...company,
+      trades: company.trades.map((ct: any) => ct.trade.name)
+    }))
 
     return NextResponse.json({
       success: true,

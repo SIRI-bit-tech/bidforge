@@ -7,8 +7,8 @@ import { URQLProvider } from "@/lib/providers/urql-provider"
 import { AuthProvider } from "@/lib/providers/auth-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { RealTimeProvider } from "@/components/real-time-provider"
-import { AblyChatProvider } from "@/hooks/use-ably-chat"
+import { AblyProvider } from "@/hooks/use-ably-chat"
+import { RealTimeManager } from "@/components/real-time-manager"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -52,11 +52,10 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <ErrorBoundary>
           <AuthProvider>
-            <AblyChatProvider>
-              <RealTimeProvider>
-                <URQLProvider>{children}</URQLProvider>
-              </RealTimeProvider>
-            </AblyChatProvider>
+            <AblyProvider>
+              <RealTimeManager />
+              <URQLProvider>{children}</URQLProvider>
+            </AblyProvider>
           </AuthProvider>
           <Toaster />
           <Analytics />

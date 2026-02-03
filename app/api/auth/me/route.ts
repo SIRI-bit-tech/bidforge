@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/services/auth'
-import { db, users } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
@@ -28,21 +27,20 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Fetch current user data from database
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        emailVerified: users.emailVerified,
-        companyId: users.companyId,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(eq(users.id, payload.userId))
-      .limit(1)
+    // Fetch current user data from database using Prisma
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        emailVerified: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+      }
+    })
 
     if (!user) {
       // User no longer exists, clear the cookie
@@ -57,16 +55,7 @@ export async function GET(request: NextRequest) {
     // Return user data
     return NextResponse.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        companyId: user.companyId,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      }
+      user
     })
 
   } catch (error) {

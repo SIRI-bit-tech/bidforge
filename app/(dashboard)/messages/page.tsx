@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@/lib/store"
-import { useSocket } from "@/lib/hooks/useSocket"
 import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
@@ -41,10 +40,6 @@ export default function MessagesPage() {
     loadUsers,
     loadProjects
   } = useStore()
-
-  const {
-    markAsRead
-  } = useSocket()
 
   const { toast } = useToast()
 
@@ -259,7 +254,7 @@ export default function MessagesPage() {
         markMessagesSequentially()
       }
     }
-  }, [selectedConv, currentUser, markMessageAsRead, markAsRead])
+  }, [selectedConv, currentUser, markMessageAsRead])
 
   // Join project room when conversation is selected (disabled - WebSocket not available)
   // useEffect(() => {

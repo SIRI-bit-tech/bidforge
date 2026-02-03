@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hashPassword, generateVerificationData, validatePasswordStrength } from '@/lib/services/auth'
 import { sendVerificationEmail } from '@/lib/services/email'
-import { db, users, verificationCodes } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 import { logError } from '@/lib/logger'
 import { handleAPIError } from '@/app/api/error-handler/route'
@@ -12,7 +11,7 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.REGISTRATION.keyPrefix)
     const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.REGISTRATION)
-    
+
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
       // Rate limit exceeded for registration attempt
@@ -49,14 +48,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const existingUser = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1)
+    // Check if user already exists using Prisma
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    })
 
-    if (existingUser.length > 0) {
+    if (existingUser) {
       // Registration attempt with existing email
       return NextResponse.json(
         { error: 'An account with this email already exists' },
@@ -67,20 +64,15 @@ export async function POST(request: NextRequest) {
     // Validate password strength
     const passwordValidation = validatePasswordStrength(password)
     if (!passwordValidation.isValid) {
-      // Log detailed errors for debugging (always available in server logs)
-      // Password validation failed
-
       // Environment-aware error response
       const isDevelopment = process.env.NODE_ENV === 'development' || process.env.SHOW_PASSWORD_ERRORS === 'true'
-      
+
       if (isDevelopment) {
-        // Development: Return detailed errors for better DX
         return NextResponse.json(
           { error: 'Password does not meet requirements', details: passwordValidation.errors },
           { status: 400 }
         )
       } else {
-        // Production: Return generic error to prevent information leakage
         return NextResponse.json(
           { error: 'Password does not meet security requirements' },
           { status: 400 }
@@ -90,45 +82,35 @@ export async function POST(request: NextRequest) {
 
     // Hash password
     const hashedPassword = await hashPassword(password)
-    
+
     // Generate verification code
     const verificationData = generateVerificationData()
 
-    // Create user in database transaction
+    // Create user and verification code in a transaction
     let newUser: any
-    let verificationCodeId: string
 
     try {
-      // Start transaction to ensure data consistency
-      await db.transaction(async (tx) => {
-        // Insert new user
-        const [createdUser] = await tx
-          .insert(users)
-          .values({
+      newUser = await prisma.$transaction(async (tx: any) => {
+        const createdUser = await tx.user.create({
+          data: {
             email: email.toLowerCase(),
             name: name.trim(),
             passwordHash: hashedPassword,
             role: role as 'CONTRACTOR' | 'SUBCONTRACTOR',
             emailVerified: false,
-          })
-          .returning()
+          }
+        })
 
-        newUser = createdUser
-
-        // Insert verification code
-        const [createdCode] = await tx
-          .insert(verificationCodes)
-          .values({
+        await tx.verificationCode.create({
+          data: {
             userId: createdUser.id,
             code: verificationData.code,
             expiresAt: verificationData.expiresAt,
-          })
-          .returning()
+          }
+        })
 
-        verificationCodeId = createdCode.id
+        return createdUser
       })
-
-
 
     } catch (dbError) {
       // Log database errors with email notification
@@ -138,7 +120,7 @@ export async function POST(request: NextRequest) {
         errorType: 'registration_database_error',
         severity: 'critical'
       })
-      
+
       return NextResponse.json(
         { error: 'Failed to create account. Please try again.' },
         { status: 500 }
@@ -159,20 +141,17 @@ export async function POST(request: NextRequest) {
         severity: 'medium'
       })
 
-      // TODO: In production, implement a job queue for email retry
-      // For now, we'll return an error but the user is still created
-      // The user can request a new verification code later
       return NextResponse.json(
-        { 
+        {
           error: 'Account created but failed to send verification email. Please try resending the verification code.',
           userId: newUser.id,
           canResend: true
         },
-        { status: 207 } // 207 Multi-Status: partial success
+        { status: 207 }
       )
     }
 
-    // Return success (don't include sensitive data)
+    // Return success
     return NextResponse.json({
       success: true,
       user: {

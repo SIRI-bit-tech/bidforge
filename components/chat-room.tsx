@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { useAblyChat } from "@/hooks/use-ably-chat"
 import { Room, Message as ChatMessage } from "@ably/chat"
 import { useStore } from "@/lib/store"
@@ -20,7 +20,7 @@ interface ChatRoomProps {
 }
 
 export function ChatRoom({ projectId, recipientId, recipientName, onBack, className }: ChatRoomProps) {
-    const { getRoom, isConnected } = useAblyChat()
+    const { getRoom, isConnected, error: ablyError } = useAblyChat()
     const { currentUser } = useStore()
     const [room, setRoom] = useState<Room | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -30,16 +30,21 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
     const [isSending, setIsSending] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Room ID format: project-{projectId}-{user1Id}-{user2Id} (sorted)
-    const roomId = `project-${projectId}-${[currentUser?.id, recipientId].sort().join("-")}`
+    const roomId = useMemo(() => {
+        if (!currentUser?.id) return null
+        return `project-${projectId}-${[currentUser.id, recipientId].sort().join("-")}`
+    }, [projectId, currentUser?.id, recipientId])
 
     useEffect(() => {
-        if (!isConnected || !currentUser) return
+        if (!currentUser) return
 
         let currentRoom: Room | null = null
 
         async function setupRoom() {
+            if (!roomId) return
             try {
                 const r = await getRoom(roomId)
                 if (!r) return
@@ -47,44 +52,77 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
                 currentRoom = r
                 setRoom(r)
 
-                // Attach to room
-                await r.attach()
+                // Subscriptions and cleanup will be managed carefully
+                let unsubMessages: (() => void) | undefined
+                let unsubTyping: (() => void) | undefined
 
-                // Load message history
-                const history = await r.messages.history({ limit: 50 })
-                setMessages(history.items.reverse())
+                try {
+                    // 1. Explicitly attach first
+                    await r.attach()
 
-                // Subscribe to new messages
-                const { unsubscribe: unsubMessages } = r.messages.subscribe((msg) => {
-                    setMessages((prev) => [...prev, msg.message])
+                    if (currentRoom === r && r.status === 'attached') {
+                        // 2. Load history FIRST to set baseline
+                        const history = await r.messages.history({ limit: 50 })
+                        const historicalMessages = history.items.reverse()
+                        setMessages(historicalMessages)
 
-                    // Scroll to bottom
-                    setTimeout(() => {
-                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                    }, 100)
-                })
+                        // 3. Setup subscriptions only after attached and history loaded
+                        const msgSub = r.messages.subscribe((msg) => {
+                            setMessages((prev) => {
+                                // Deduplicate by serial
+                                if (msg.message.serial && prev.some(m => m.serial === msg.message.serial)) return prev
 
-                // Subscribe to typing indicators
-                const { unsubscribe: unsubTyping } = r.typing.subscribe((event) => {
-                    setTypingUsers((prev) => {
-                        const next = new Set(prev)
-                        if (event.currentlyTyping.has(recipientId)) {
-                            next.add(recipientId)
-                        } else {
-                            next.delete(recipientId)
+                                // Replace optimistic placeholder if it matches
+                                const filtered = prev.filter(m =>
+                                    (msg.message.serial && m.serial !== msg.message.serial) &&
+                                    !(m.serial?.toString().startsWith('optimistic-') && m.text === msg.message.text && m.clientId === msg.message.clientId)
+                                )
+                                return [...filtered, msg.message]
+                            })
+                            setTimeout(() => {
+                                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                            }, 100)
+                        })
+                        unsubMessages = msgSub.unsubscribe
+
+                        const typeSub = r.typing.subscribe((event) => {
+                            setTypingUsers((prev) => {
+                                const next = new Set(prev)
+                                if (event.currentlyTyping.has(recipientId)) {
+                                    next.add(recipientId)
+                                } else {
+                                    next.delete(recipientId)
+                                }
+                                return next
+                            })
+                        })
+                        unsubTyping = typeSub.unsubscribe
+
+                        // 4. Enter presence
+                        if (r.status === 'attached') {
+                            r.presence.enter().catch(() => { })
                         }
-                        return next
-                    })
-                })
-
-                // Subscribe to presence
-                await r.presence.enter()
+                    }
+                } catch (bgError) {
+                    if (currentRoom === r) {
+                        console.warn("Room attachment failed, will retry:", bgError)
+                    }
+                }
 
                 return () => {
-                    unsubMessages()
-                    unsubTyping()
-                    r.presence.leave().catch(console.error)
-                    r.detach().catch(console.error)
+                    unsubMessages?.()
+                    unsubTyping?.()
+                    if (typingTimeoutRef.current) {
+                        clearTimeout(typingTimeoutRef.current)
+                        typingTimeoutRef.current = null
+                    }
+
+                    // Graceful cleanup
+                    if (r.status === 'attached' || r.status === 'attaching') {
+                        r.typing.stop().catch(() => { })
+                        r.presence.leave().catch(() => { })
+                        r.detach().catch(() => { })
+                    }
                 }
             } catch (error) {
                 console.error("Failed to setup chat room:", error)
@@ -96,23 +134,38 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
         return () => {
             cleanup.then((fn) => fn?.())
         }
-    }, [isConnected, currentUser, roomId, recipientId, getRoom])
+    }, [isConnected, currentUser?.id, roomId, recipientId, getRoom])
 
     const handleSendMessage = async () => {
-        if (!room || !newMessage.trim() || !currentUser || isSending) return
+        const messageText = newMessage.trim()
+        if (!room || !messageText || !currentUser || isSending) return
 
         setIsSending(true)
         try {
+            // Optimistic update
+            const optimisticMsg: any = {
+                serial: `optimistic-${Date.now()}`,
+                text: messageText,
+                clientId: currentUser.id,
+                timestamp: Date.now(),
+                metadata: {
+                    senderId: currentUser.id,
+                    senderName: currentUser.name,
+                    projectId,
+                },
+            }
+
+            setMessages((prev) => [...prev, optimisticMsg])
+            setNewMessage("")
+
             await room.messages.send({
-                text: newMessage,
+                text: messageText,
                 metadata: {
                     senderId: currentUser.id,
                     senderName: currentUser.name,
                     projectId,
                 },
             })
-
-            setNewMessage("")
 
             // Stop typing indicator
             await room.typing.stop()
@@ -125,7 +178,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
                 body: JSON.stringify({
                     projectId,
                     receiverId: recipientId,
-                    text: newMessage,
+                    text: messageText,
                 }),
             })
         } catch (error) {
@@ -139,16 +192,21 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
     const handleTyping = async () => {
         if (!room || !currentUser) return
 
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current)
+        }
+
         if (!isTyping) {
             setIsTyping(true)
         }
         await room.typing.keystroke()
 
         // Auto-stop typing after 5 seconds of inactivity
-        setTimeout(async () => {
+        typingTimeoutRef.current = setTimeout(async () => {
             if (isTyping) {
                 await room.typing.stop()
                 setIsTyping(false)
+                typingTimeoutRef.current = null
             }
         }, 5000)
     }
@@ -160,13 +218,27 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
         }
     }
 
-    if (!isConnected) {
+    if (ablyError && !room) {
+        return (
+            <Card>
+                <CardContent className="flex items-center justify-center h-96">
+                    <div className="text-center text-destructive">
+                        <p className="font-semibold mb-2">Chat Connection Error</p>
+                        <p className="text-sm">{ablyError}</p>
+                        <p className="text-xs mt-4 text-muted-foreground">Retrying automatically...</p>
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    if (!room) {
         return (
             <Card>
                 <CardContent className="flex items-center justify-center h-96">
                     <div className="text-center">
                         <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Connecting to chat...</p>
+                        <p className="text-sm text-muted-foreground">Initializing chat...</p>
                     </div>
                 </CardContent>
             </Card>
@@ -191,8 +263,12 @@ export function ChatRoom({ projectId, recipientId, recipientName, onBack, classN
                         <CardTitle className="text-lg">
                             Chat with {recipientName}
                         </CardTitle>
-                        {typingUsers.has(recipientId) && (
+                        {typingUsers.has(recipientId) ? (
                             <p className="text-xs text-muted-foreground italic">typing...</p>
+                        ) : !isConnected ? (
+                            <p className="text-xs text-amber-500 animate-pulse">connecting real-time...</p>
+                        ) : (
+                            <p className="text-xs text-green-500">online</p>
                         )}
                     </div>
                 </div>

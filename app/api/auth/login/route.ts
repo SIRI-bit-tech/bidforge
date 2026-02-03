@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPassword, generateJWT } from '@/lib/services/auth'
-import { db, users } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 import { handleAPIError } from '@/app/api/error-handler/route'
 
@@ -10,7 +9,7 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.LOGIN.keyPrefix)
     const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.LOGIN)
-    
+
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
       // Rate limit exceeded for login attempt
@@ -30,14 +29,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
-
-    // Find user by email
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1)
+    // Find user by email using Prisma
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    })
 
     if (!user) {
       // Login attempt for non-existent user
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (!user.emailVerified) {
       // Login attempt with unverified email
       return NextResponse.json(
-        { 
+        {
           error: 'Please verify your email address before logging in',
           needsVerification: true,
           email: user.email
@@ -71,14 +66,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate JWT token with minimal claims
-    const tokenPayload = { 
-      userId: user.id, 
+    const tokenPayload = {
+      userId: user.id,
       role: user.role,
       companyId: user.companyId || undefined
     }
     const token = generateJWT(tokenPayload)
-
-
 
     // Create response with user data (no token in body)
     const response = NextResponse.json({

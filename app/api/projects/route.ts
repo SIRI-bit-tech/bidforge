@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, projects, projectTrades, trades as tradesTable } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import { handleAPIError } from '@/app/api/error-handler/route'
 
 export async function GET(request: NextRequest) {
-  let payload: any // Hoist payload declaration to make it accessible in catch block
-  
+  let payload: any
+
   try {
-    // Authentication check
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      // Projects fetch attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -21,7 +18,6 @@ export async function GET(request: NextRequest) {
 
     payload = verifyJWT(token)
     if (!payload) {
-      // Projects fetch attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -30,46 +26,17 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    // Note: createdBy query parameter is ignored for security - users can only see projects they have access to
 
-    // Get projects with their trades
-    const projectsWithTrades = await db
-      .select({
-        id: projects.id,
-        title: projects.title,
-        description: projects.description,
-        location: projects.location,
-        city: projects.city,
-        state: projects.state,
-        budgetMin: projects.budgetMin,
-        budgetMax: projects.budgetMax,
-        startDate: projects.startDate,
-        endDate: projects.endDate,
-        deadline: projects.deadline,
-        status: projects.status,
-        createdById: projects.createdById,
-        createdAt: projects.createdAt,
-        updatedAt: projects.updatedAt,
-        tradeName: tradesTable.name,
-      })
-      .from(projects)
-      .leftJoin(projectTrades, eq(projects.id, projectTrades.projectId))
-      .leftJoin(tradesTable, eq(projectTrades.tradeId, tradesTable.id))
+    // Define authorization-based filtering
+    const where: any = {}
 
-    // Apply authorization-based filtering
-    let filteredProjects = projectsWithTrades
-
-    // Users can see:
-    // 1. Projects they created (if they're contractors)
-    // 2. Published projects (if they're subcontractors looking for opportunities)
     if (payload.role === 'CONTRACTOR') {
-      // Contractors can see their own projects (all statuses)
-      filteredProjects = filteredProjects.filter(p => p.createdById === payload.userId)
+      // Contractors see their own projects
+      where.createdById = payload.userId
     } else if (payload.role === 'SUBCONTRACTOR') {
-      // Subcontractors can only see published projects (opportunities)
-      filteredProjects = filteredProjects.filter(p => p.status === 'PUBLISHED')
+      // Subcontractors see published projects
+      where.status = 'PUBLISHED'
     } else {
-      // Unknown role - deny access
       return NextResponse.json(
         { error: 'Access denied. Invalid user role.' },
         { status: 403 }
@@ -78,46 +45,32 @@ export async function GET(request: NextRequest) {
 
     // Apply additional status filter if specified
     if (status && ['DRAFT', 'PUBLISHED', 'CLOSED', 'AWARDED'].includes(status)) {
-      filteredProjects = filteredProjects.filter(p => p.status === status)
+      where.status = status as any
     }
 
-    // Group trades by project
-    const projectsMap = new Map()
-    
-    filteredProjects.forEach(row => {
-      if (!projectsMap.has(row.id)) {
-        projectsMap.set(row.id, {
-          id: row.id,
-          title: row.title,
-          description: row.description,
-          location: row.location,
-          city: row.city,
-          state: row.state,
-          budgetMin: row.budgetMin,
-          budgetMax: row.budgetMax,
-          startDate: row.startDate,
-          endDate: row.endDate,
-          deadline: row.deadline,
-          status: row.status,
-          createdBy: row.createdById, // Map createdById to createdBy for compatibility
-          createdById: row.createdById,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          trades: [],
-        })
-      }
-      
-      if (row.tradeName) {
-        const project = projectsMap.get(row.id)
-        if (!project.trades.includes(row.tradeName)) {
-          project.trades.push(row.tradeName)
+    // Get projects with their trades using Prisma
+    const projects = await prisma.project.findMany({
+      where,
+      include: {
+        trades: {
+          include: {
+            trade: true
+          }
         }
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
     })
 
-    const result = Array.from(projectsMap.values())
-
-    // User fetched projects
+    // Format the result to match the expected interface (flattening trades and serializing Decimals)
+    const result = projects.map((project: any) => ({
+      ...project,
+      budgetMin: project.budgetMin?.toString() || null,
+      budgetMax: project.budgetMax?.toString() || null,
+      createdBy: project.createdById,
+      trades: project.trades.map((pt: any) => pt.trade.name)
+    }))
 
     return NextResponse.json({
       success: true,
@@ -136,14 +89,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let payload: any // Hoist payload declaration to make it accessible in catch block
-  
+  let payload: any
+
   try {
-    // Authentication check
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      // Project creation attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -152,16 +103,13 @@ export async function POST(request: NextRequest) {
 
     payload = verifyJWT(token)
     if (!payload) {
-      // Project creation attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
       )
     }
 
-    // Only contractors can create projects
     if (payload.role !== 'CONTRACTOR') {
-      // User with non-contractor role attempted to create project
       return NextResponse.json(
         { error: 'Access denied. Only contractors can create projects.' },
         { status: 403 }
@@ -170,9 +118,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, status, trades } = body
-    // Note: createdById is ignored from request body - we use authenticated user's ID
 
-    // Validate required fields (removed createdById since we derive it from auth)
     if (!title || !description || !location || !deadline) {
       return NextResponse.json(
         { error: 'Missing required fields: title, description, location, deadline' },
@@ -180,63 +126,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use authenticated user's ID as createdById
-    const authenticatedUserId = payload.userId
-
-    const [project] = await db
-      .insert(projects)
-      .values({
-        title,
-        description,
-        location,
-        budgetMin: budgetMin || null,
-        budgetMax: budgetMax || null,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        deadline: new Date(deadline),
-        createdById: authenticatedUserId, // Use authenticated user's ID
-        status: status || 'DRAFT',
-      })
-      .returning()
-
-    // Save project trades if provided
-    if (trades && Array.isArray(trades) && trades.length > 0) {
-      // For each trade name, ensure it exists and create project-trade relationship
-      for (const tradeName of trades) {
-        // Check if trade exists
-        const [existingTrade] = await db
-          .select({ id: tradesTable.id })
-          .from(tradesTable)
-          .where(eq(tradesTable.name, tradeName))
-          .limit(1)
-
-        let tradeId: string
-        if (existingTrade) {
-          tradeId = existingTrade.id
-        } else {
-          // Create new trade
-          const [newTrade] = await db
-            .insert(tradesTable)
-            .values({ name: tradeName })
-            .returning({ id: tradesTable.id })
-          tradeId = newTrade.id
+    // Use Prisma transaction for project and trades creation
+    const project = await prisma.$transaction(async (tx: any) => {
+      // Create project
+      const createdProject = await tx.project.create({
+        data: {
+          title,
+          description,
+          location,
+          budgetMin: budgetMin ? Number(budgetMin) : null,
+          budgetMax: budgetMax ? Number(budgetMax) : null,
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          deadline: new Date(deadline),
+          createdById: payload.userId,
+          status: status || 'DRAFT',
         }
+      })
 
-        // Create project-trade relationship
-        await db
-          .insert(projectTrades)
-          .values({
-            projectId: project.id,
-            tradeId: tradeId,
+      // Link trades if provided
+      if (trades && Array.isArray(trades) && trades.length > 0) {
+        for (const tradeName of trades) {
+          const trade = await tx.trade.upsert({
+            where: { name: tradeName },
+            update: {},
+            create: { name: tradeName }
           })
-      }
-    }
 
-    // User created project
+          await tx.projectTrade.create({
+            data: {
+              projectId: createdProject.id,
+              tradeId: trade.id
+            }
+          })
+        }
+      }
+
+      return createdProject
+    })
 
     return NextResponse.json({
       success: true,
-      project
+      project: {
+        ...project,
+        budgetMin: project.budgetMin?.toString() || null,
+        budgetMax: project.budgetMax?.toString() || null,
+      }
     }, { status: 201 })
 
   } catch (error) {

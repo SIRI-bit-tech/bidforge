@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import * as Ably from "ably"
 import { ChatClient, Room, LogLevel } from "@ably/chat"
+import { useStore } from "@/lib/store"
 
 interface AblyContextType {
     realtimeClient: Ably.Realtime | null
@@ -19,13 +20,15 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
     const [chatClient, setChatClient] = useState<ChatClient | null>(null)
     const [isConnected, setIsConnected] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const isAuthenticated = useStore(state => state.isAuthenticated)
 
     useEffect(() => {
         let mounted = true
-        let client: ChatClient | null = null
         let realtime: Ably.Realtime | null = null
 
         async function initializeChat() {
+            if (!isAuthenticated) return
+
             try {
                 // Get auth token from your API with a timeout
                 const controller = new AbortController()
@@ -35,6 +38,10 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
                 clearTimeout(timeoutId)
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        // Silently handle unauthorized - wait for login
+                        return
+                    }
                     throw new Error(`Failed to get Ably token: ${response.statusText}`)
                 }
 
@@ -45,6 +52,7 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
                     authCallback: async (tokenParams, callback) => {
                         try {
                             const res = await fetch("/api/ably/auth")
+                            if (!res.ok) throw new Error("Ably auth failed")
                             const tokenReq = await res.json()
                             callback(null, tokenReq)
                         } catch (error: any) {
@@ -66,7 +74,7 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
                     setChatClient(chat)
                 }
 
-                // Monitor connection state in the background
+                // Monitor connection state
                 const handleStateChange = () => {
                     if (mounted) {
                         setIsConnected(realtime?.connection.state === "connected")
@@ -78,15 +86,16 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
                 realtime.connection.on("failed", handleStateChange)
                 realtime.connection.on("suspended", handleStateChange)
 
-                // Initial check
                 handleStateChange()
 
             } catch (err: any) {
                 console.error("Failed to initialize Ably Chat:", err)
                 if (mounted) {
                     setError(err.message || "Failed to initialize chat")
-                    // If it failed once, we might want to retry after a delay
-                    setTimeout(initializeChat, 5000)
+                    // Retry only if it's not an auth error
+                    if (isAuthenticated) {
+                        setTimeout(initializeChat, 5000)
+                    }
                 }
             }
         }
@@ -99,8 +108,11 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
                 realtime.connection.off()
                 realtime.close()
             }
+            setRealtimeClient(null)
+            setChatClient(null)
+            setIsConnected(false)
         }
-    }, [])
+    }, [isAuthenticated])
 
     const getRoom = useCallback(async (roomId: string): Promise<Room | null> => {
         if (!chatClient) {

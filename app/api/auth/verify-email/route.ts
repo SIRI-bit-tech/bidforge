@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateJWT } from '@/lib/services/auth'
-import { db, users, verificationCodes } from '@/lib/db'
-import { eq, and, gt } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
@@ -9,10 +8,9 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.EMAIL_VERIFICATION.keyPrefix)
     const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.EMAIL_VERIFICATION)
-    
+
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
-      // Rate limit exceeded for email verification
       return NextResponse.json(
         { error: `Too many verification attempts. Please try again in ${resetIn}.` },
         { status: 429 }
@@ -31,26 +29,18 @@ export async function POST(request: NextRequest) {
 
     // Validate code format
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      // Invalid verification code format provided
       return NextResponse.json(
         { error: 'Invalid verification code format' },
         { status: 400 }
       )
     }
 
+    // Find user by email using Prisma
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    })
 
-
-    // Find user by email
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1)
-
-    // Security: Don't reveal if user exists or not - use generic error for both cases
     if (!user) {
-      // Log for security monitoring without revealing user existence
-      // Verification attempt with invalid request
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
         { status: 400 }
@@ -65,52 +55,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find valid verification code
-    const [verificationRecord] = await db
-      .select()
-      .from(verificationCodes)
-      .where(
-        and(
-          eq(verificationCodes.userId, user.id),
-          eq(verificationCodes.code, code),
-          eq(verificationCodes.used, false),
-          gt(verificationCodes.expiresAt, new Date())
-        )
-      )
-      .limit(1)
+    // Find valid verification code using Prisma
+    const verificationRecord = await prisma.verificationCode.findFirst({
+      where: {
+        userId: user.id,
+        code: code,
+        used: false,
+        expiresAt: {
+          gt: new Date()
+        }
+      }
+    })
 
     if (!verificationRecord) {
-      // Invalid or expired verification code provided
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
         { status: 400 }
       )
     }
 
-    // Update user and mark code as used in transaction
+    // Update user and mark code as used in a transaction
     try {
-      await db.transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         // Mark user as verified
-        await tx
-          .update(users)
-          .set({ 
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
             emailVerified: true,
             updatedAt: new Date()
-          })
-          .where(eq(users.id, user.id))
+          }
+        })
 
         // Mark verification code as used
-        await tx
-          .update(verificationCodes)
-          .set({ used: true })
-          .where(eq(verificationCodes.id, verificationRecord.id))
+        await tx.verificationCode.update({
+          where: { id: verificationRecord.id },
+          data: { used: true }
+        })
       })
 
-
-
       // Generate JWT token for automatic login after verification
-      const tokenPayload = { 
-        userId: user.id, 
+      const tokenPayload = {
+        userId: user.id,
         role: user.role,
         companyId: user.companyId || undefined
       }
@@ -130,7 +115,7 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Set httpOnly cookie with JWT token (auto-login after verification)
+      // Set httpOnly cookie with JWT token
       const isProduction = process.env.NODE_ENV === 'production'
       response.cookies.set('auth-token', token, {
         httpOnly: true,
@@ -143,7 +128,6 @@ export async function POST(request: NextRequest) {
       return response
 
     } catch (dbError) {
-      // Database error during email verification
       return NextResponse.json(
         { error: 'Verification failed. Please try again.' },
         { status: 500 }
@@ -151,7 +135,6 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    // Email verification error
     return NextResponse.json(
       { error: 'Verification failed. Please try again.' },
       { status: 500 }

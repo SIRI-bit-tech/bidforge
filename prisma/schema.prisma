@@ -9,6 +9,7 @@ datasource db {
 enum UserRole {
   CONTRACTOR
   SUBCONTRACTOR
+  ADMIN
 }
 
 enum ProjectStatus {

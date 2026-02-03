@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateVerificationData } from '@/lib/services/auth'
 import { sendVerificationEmail } from '@/lib/services/email'
-import { db, users, verificationCodes } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
@@ -10,10 +9,9 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.RESEND_CODE.keyPrefix)
     const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.RESEND_CODE)
-    
+
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
-      console.warn(`Rate limit exceeded for resend code from ${rateLimitKey}`)
       return NextResponse.json(
         { error: `Too many resend attempts. Please try again in ${resetIn}.` },
         { status: 429 }
@@ -30,33 +28,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
-
-    // Find user by email
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1)
+    // Find user by email using Prisma
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    })
 
     // Security: Always return success to prevent user enumeration
-    // Only send email if user exists and is not verified
-    if (!user) {
-      // Log for security monitoring without revealing user existence
-      console.warn('Resend attempt for invalid request:', {
-        timestamp: new Date().toISOString(),
-        ip: rateLimitKey.split(':')[1]
-      })
-      // Return success to prevent enumeration
-      return NextResponse.json({
-        success: true,
-        message: 'If an account with this email exists and is unverified, a verification code has been sent.',
-      })
-    }
-
-    // Check if user is already verified
-    if (user.emailVerified) {
-      // Return success to prevent enumeration, but don't send email
+    if (!user || user.emailVerified) {
       return NextResponse.json({
         success: true,
         message: 'If an account with this email exists and is unverified, a verification code has been sent.',
@@ -68,29 +46,27 @@ export async function POST(request: NextRequest) {
 
     // Invalidate old codes and create new one in transaction
     try {
-      await db.transaction(async (tx) => {
-        // Mark all existing unused codes as used (invalidate them)
-        await tx
-          .update(verificationCodes)
-          .set({ used: true })
-          .where(
-            and(
-              eq(verificationCodes.userId, user.id),
-              eq(verificationCodes.used, false)
-            )
-          )
+      await prisma.$transaction(async (tx: any) => {
+        // Mark all existing unused codes for this user as used
+        await tx.verificationCode.updateMany({
+          where: {
+            userId: user.id,
+            used: false
+          },
+          data: {
+            used: true
+          }
+        })
 
         // Insert new verification code
-        await tx
-          .insert(verificationCodes)
-          .values({
+        await tx.verificationCode.create({
+          data: {
             userId: user.id,
             code: verificationData.code,
             expiresAt: verificationData.expiresAt,
-          })
+          }
+        })
       })
-
-
 
     } catch (dbError) {
       console.error('Database error during code generation:', dbError)

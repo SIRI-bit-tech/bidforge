@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, documents, projects, bids, users, companies } from '@/lib/db'
-import { eq, desc, and, sql } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
@@ -38,20 +37,19 @@ export async function POST(request: NextRequest) {
 
     // 2. Validate user has access to the project
     // Check if user is project owner OR has submitted a bid to the project
-    const [projectAccess] = await db
-      .select({
-        projectId: projects.id,
-        createdById: projects.createdById,
-        bidId: bids.id,
-      })
-      .from(projects)
-      .leftJoin(bids, eq(bids.projectId, projects.id))
-      .where(
-        eq(projects.id, projectId)
-      )
-      .limit(1)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        createdById: true,
+        bids: {
+          where: { subcontractorId: payload.userId },
+          select: { id: true }
+        }
+      }
+    })
 
-    if (!projectAccess) {
+    if (!project) {
       // User attempted to upload document to non-existent project
       return NextResponse.json(
         { error: 'Project not found' },
@@ -60,25 +58,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has access (is owner OR has submitted a bid)
-    const isOwner = projectAccess.createdById === payload.userId
-
-    let hasAccess = isOwner
-
-    if (!hasAccess) {
-      // Check if user has submitted a bid to this project
-      const [bidAccess] = await db
-        .select({ id: bids.id })
-        .from(bids)
-        .where(
-          and(
-            eq(bids.projectId, projectId),
-            eq(bids.subcontractorId, payload.userId)
-          )
-        )
-        .limit(1)
-
-      hasAccess = !!bidAccess
-    }
+    const isOwner = project.createdById === payload.userId
+    const hasBid = project.bids.length > 0
+    const hasAccess = isOwner || hasBid
 
     if (!hasAccess) {
       // User attempted unauthorized document upload to project
@@ -89,18 +71,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. User & Company Access Validation
-    const [userData] = await db
-      .select({
-        companyId: users.companyId,
-        plan: companies.plan,
-        storageUsed: companies.storageUsed,
-      })
-      .from(users)
-      .leftJoin(companies, eq(users.companyId, companies.id))
-      .where(eq(users.id, payload.userId))
-      .limit(1)
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        companyId: true,
+        company: {
+          select: {
+            plan: true,
+            storageUsed: true
+          }
+        }
+      }
+    })
 
-    if (!userData || !userData.companyId) {
+    if (!user || !user.companyId || !user.company) {
       return NextResponse.json(
         { error: 'User must belong to a company to upload documents' },
         { status: 400 }
@@ -114,43 +98,48 @@ export async function POST(request: NextRequest) {
       ENTERPRISE: Number.MAX_SAFE_INTEGER, // Unlimited
     }
 
-    const currentPlan = (userData.plan as keyof typeof QUOTAS) || "FREE"
+    const currentPlan = user.company.plan as keyof typeof QUOTAS
     const limit = QUOTAS[currentPlan]
     const sizeInBytes = size || 0
 
-    if ((userData.storageUsed || 0) + sizeInBytes > limit) {
+    if ((user.company.storageUsed || 0) + sizeInBytes > limit) {
       return NextResponse.json(
         { error: `Storage quota exceeded for ${currentPlan} plan. Please upgrade or delete old files.` },
         { status: 403 }
       )
     }
 
-    // 4. Insert Document
-    const [newDocument] = await db
-      .insert(documents)
-      .values({
-        projectId,
-        name,
-        type,
-        url,
-        size: sizeInBytes,
-        uploadedById: payload.userId, // Use authenticated user's ID
-        version: 1,
+    // 4. Insert Document and Update Storage in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const newDocument = await tx.document.create({
+        data: {
+          projectId,
+          name,
+          type,
+          url,
+          size: sizeInBytes,
+          uploadedById: payload.userId,
+          version: 1,
+        }
       })
-      .returning()
 
-    // 5. Update Company Storage Usage
-    await db
-      .update(companies)
-      .set({
-        storageUsed: sql`${companies.storageUsed} + ${sizeInBytes}`,
-        updatedAt: new Date(),
+      // Update Company Storage Usage
+      await tx.company.update({
+        where: { id: user.companyId! },
+        data: {
+          storageUsed: {
+            increment: sizeInBytes
+          },
+          updatedAt: new Date(),
+        }
       })
-      .where(eq(companies.id, userData.companyId))
+
+      return newDocument
+    })
 
     // Document uploaded successfully
 
-    return NextResponse.json({ document: newDocument }, { status: 201 })
+    return NextResponse.json({ document: result }, { status: 201 })
   } catch (error) {
     logError('documents endpoint error', error, {
       endpoint: '/api/documents',
@@ -197,16 +186,19 @@ export async function GET(request: NextRequest) {
 
     // Verify user has access to the requested project
     // Check if project belongs to or is shared with the user
-    const [projectAccess] = await db
-      .select({
-        projectId: projects.id,
-        createdById: projects.createdById,
-      })
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        createdById: true,
+        bids: {
+          where: { subcontractorId: payload.userId },
+          select: { id: true }
+        }
+      }
+    })
 
-    if (!projectAccess) {
+    if (!project) {
       return NextResponse.json(
         { error: 'Project not found' },
         { status: 404 }
@@ -214,25 +206,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is project owner OR has submitted a bid (project access)
-    const isOwner = projectAccess.createdById === payload.userId
-
-    let hasAccess = isOwner
-
-    if (!hasAccess) {
-      // Check if user has submitted a bid to this project
-      const [bidAccess] = await db
-        .select({ id: bids.id })
-        .from(bids)
-        .where(
-          and(
-            eq(bids.projectId, projectId),
-            eq(bids.subcontractorId, payload.userId)
-          )
-        )
-        .limit(1)
-
-      hasAccess = !!bidAccess
-    }
+    const isOwner = project.createdById === payload.userId
+    const hasBid = project.bids.length > 0
+    const hasAccess = isOwner || hasBid
 
     if (!hasAccess) {
       // User attempted unauthorized document access to project
@@ -243,11 +219,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Only proceed to fetch and return documents when access check passes
-    const projectDocuments = await db
-      .select()
-      .from(documents)
-      .where(eq(documents.projectId, projectId))
-      .orderBy(desc(documents.uploadedAt))
+    const projectDocuments = await prisma.document.findMany({
+      where: { projectId },
+      orderBy: { uploadedAt: 'desc' }
+    })
 
     return NextResponse.json({ documents: projectDocuments })
   } catch (error) {

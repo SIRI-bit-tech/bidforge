@@ -1,6 +1,4 @@
 import { type GraphQLContext, requireAuth, requireRole } from "../context"
-import { invitations, notifications } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
 import { pubsub } from "../pubsub"
 import { sendEmail, emailTemplates } from "@/lib/utils/email"
 
@@ -10,25 +8,25 @@ export const invitationResolvers = {
     async invitations(_: unknown, __: unknown, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const result = await context.db.query.invitations.findMany({
-        where: eq(invitations.subcontractorId, userId),
-        with: {
+      const result = await context.prisma.invitation.findMany({
+        where: { subcontractorId: userId },
+        include: {
           project: {
-            with: {
+            include: {
               createdBy: {
-                with: {
+                include: {
                   company: true,
                 },
               },
               trades: {
-                with: {
+                include: {
                   trade: true,
                 },
               },
             },
           },
         },
-        orderBy: (invitations, { desc }) => [desc(invitations.sentAt)],
+        orderBy: { sentAt: 'desc' },
       })
 
       return result
@@ -54,24 +52,25 @@ export const invitationResolvers = {
       // Create invitations
       const createdInvitations = []
       for (const subcontractorId of subcontractorIds) {
-        const [invitation] = await context.db
-          .insert(invitations)
-          .values({
+        const invitation = await context.prisma.invitation.create({
+          data: {
             projectId,
             subcontractorId,
             status: "PENDING",
-          })
-          .returning()
+          },
+        })
 
         createdInvitations.push(invitation)
 
         // Create notification for subcontractor
-        await context.db.insert(notifications).values({
-          userId: subcontractorId,
-          type: "INVITATION",
-          title: "New Project Invitation",
-          message: `You've been invited to bid on ${project.title}`,
-          link: `/projects/${projectId}`,
+        await context.prisma.notification.create({
+          data: {
+            userId: subcontractorId,
+            type: "INVITATION",
+            title: "New Project Invitation",
+            message: `You've been invited to bid on ${project.title}`,
+            link: `/projects/${projectId}`,
+          },
         })
 
         // Publish subscription event
@@ -106,46 +105,58 @@ export const invitationResolvers = {
     async acceptInvitation(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [updated] = await context.db
-        .update(invitations)
-        .set({
+      const updated = await context.prisma.invitation.updateMany({
+        where: {
+          id,
+          subcontractorId: userId,
+        },
+        data: {
           status: "ACCEPTED",
           respondedAt: new Date(),
-        })
-        .where(and(eq(invitations.id, id), eq(invitations.subcontractorId, userId)))
-        .returning()
+        },
+      })
 
-      if (!updated) {
+      if (updated.count === 0) {
         throw new Error("Invitation not found or access denied")
       }
 
-      // Publish subscription event
-      await pubsub.publish("INVITATION_ACCEPTED", {
-        projectId: updated.projectId,
-        invitation: updated,
+      const invitation = await context.prisma.invitation.findUnique({
+        where: { id },
       })
 
-      return updated
+      // Publish subscription event
+      await pubsub.publish("INVITATION_ACCEPTED", {
+        projectId: invitation?.projectId,
+        invitation,
+      })
+
+      return invitation
     },
 
     // Decline invitation
     async declineInvitation(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [updated] = await context.db
-        .update(invitations)
-        .set({
+      const updated = await context.prisma.invitation.updateMany({
+        where: {
+          id,
+          subcontractorId: userId,
+        },
+        data: {
           status: "DECLINED",
           respondedAt: new Date(),
-        })
-        .where(and(eq(invitations.id, id), eq(invitations.subcontractorId, userId)))
-        .returning()
+        },
+      })
 
-      if (!updated) {
+      if (updated.count === 0) {
         throw new Error("Invitation not found or access denied")
       }
 
-      return updated
+      const invitation = await context.prisma.invitation.findUnique({
+        where: { id },
+      })
+
+      return invitation
     },
   },
 }

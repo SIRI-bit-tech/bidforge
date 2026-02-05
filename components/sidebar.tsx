@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
@@ -7,16 +8,22 @@ import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings, Zap } from "lucide-react"
+import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings, Zap, LogOut } from "lucide-react"
 
 export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { currentUser, messages, companies } = useStore()
-
-  const company = companies.find((c) => c.id === currentUser?.companyId)
+  const { currentUser, messages, logout } = useStore()
 
   if (!currentUser) return null
+
+  const handleLogout = () => {
+    logout()
+    router.push("/")
+  }
+
+  // Get company data from user object instead of companies array
+  const company = currentUser.company
 
   // Count unread messages
   const unreadCount = messages.filter(msg =>
@@ -46,11 +53,11 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
 
   const sidebarClasses = mobile
     ? "flex w-full flex-col"
-    : "hidden lg:flex w-64 flex-col border-r border-border bg-muted/30"
+    : "hidden lg:flex lg:fixed lg:top-16 lg:left-0 lg:bottom-0 w-64 flex-col border-r border-border bg-muted/30 z-30"
 
   return (
     <aside className={sidebarClasses}>
-      <div className="flex-1 overflow-y-auto py-6">
+      <div className="flex-1 py-6 overflow-hidden">{/* Removed overflow-y-auto */}
         <nav className="space-y-1 px-3">
           {links.map((link) => {
             const Icon = link.icon
@@ -80,6 +87,17 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
             )
           })}
         </nav>
+
+        {/* Logout button */}
+        <div className="px-3 mt-4">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <LogOut className="h-5 w-5" />
+            Logout
+          </button>
+        </div>
       </div>
 
       <div className="p-4 border-t border-border">

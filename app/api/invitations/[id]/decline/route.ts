@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, invitations } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function PATCH(
@@ -37,16 +36,12 @@ export async function PATCH(
     const { id: invitationId } = await params
 
     // Verify the invitation exists and belongs to the authenticated user
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.id, invitationId),
-          eq(invitations.subcontractorId, payload.userId)
-        )
-      )
-      .limit(1)
+    const invitation = await prisma.invitation.findFirst({
+      where: {
+        id: invitationId,
+        subcontractorId: payload.userId
+      }
+    })
 
     if (!invitation) {
       return NextResponse.json(
@@ -64,14 +59,13 @@ export async function PATCH(
     }
 
     // Update invitation status to declined
-    const [updatedInvitation] = await db
-      .update(invitations)
-      .set({ 
+    const updatedInvitation = await prisma.invitation.update({
+      where: { id: invitationId },
+      data: { 
         status: 'DECLINED',
         respondedAt: new Date()
-      })
-      .where(eq(invitations.id, invitationId))
-      .returning()
+      }
+    })
 
     return NextResponse.json({
       success: true,

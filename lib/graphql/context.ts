@@ -1,5 +1,5 @@
 import type { YogaInitialContext } from "graphql-yoga"
-import { db } from "@/lib/db"
+import prisma from "@/lib/prisma"
 import jwt from "jsonwebtoken"
 import { getJWTSecret } from "@/lib/utils/jwt"
 import { logError } from "@/lib/logger"
@@ -12,7 +12,7 @@ import {
 } from "./loaders"
 
 export interface GraphQLContext extends YogaInitialContext {
-  db: typeof db
+  prisma: typeof prisma
   userId?: string
   userRole?: "CONTRACTOR" | "SUBCONTRACTOR"
   loaders: {
@@ -64,7 +64,7 @@ export async function createContext(initialContext: YogaInitialContext): Promise
 
   return {
     ...initialContext,
-    db,
+    prisma,
     userId,
     userRole,
     loaders: {

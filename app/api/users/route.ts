@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
       } else if (role === 'CONTRACTOR') {
         where.role = 'CONTRACTOR'
       } else if (payload.companyId) {
+        // Augment existing where object, don't replace it
         where.companyId = payload.companyId
       } else {
         if (!role || !['SUBCONTRACTOR', 'CONTRACTOR'].includes(role)) {
@@ -67,9 +68,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Role-specific filter (for valid requests)
+    // Role-specific filter (for valid requests) - preserve existing where conditions
     if (role && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role)) {
-      where.role = role as any
+      // Only apply role filter if caller has sufficient privileges or the role is in their allowed set
+      const canFilterByRole = payload.role === 'ADMIN' || 
+        (payload.role === 'CONTRACTOR' && role === 'SUBCONTRACTOR') ||
+        (payload.role === 'SUBCONTRACTOR' && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role))
+      
+      if (canFilterByRole) {
+        where.role = role as any
+      }
     }
 
     // Get total count and users using Prisma
@@ -77,15 +85,17 @@ export async function GET(request: NextRequest) {
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          companyId: true,
-          emailVerified: true,
-          createdAt: true,
-          updatedAt: true,
+        include: {
+          company: {
+            include: {
+              trades: {
+                include: {
+                  trade: true
+                }
+              },
+              certifications: true
+            }
+          }
         },
         skip,
         take: limit,
@@ -95,11 +105,40 @@ export async function GET(request: NextRequest) {
       })
     ])
 
+    // Add isFounder field to users and format company trades
+    const usersWithFounderStatus = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      companyId: user.companyId,
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      isFounder: user.company?.isFounder || false,
+      company: user.company ? {
+        id: user.company.id,
+        name: user.company.name,
+        type: user.company.type,
+        address: user.company.address,
+        phone: user.company.phone,
+        website: user.company.website,
+        description: user.company.description,
+        logo: user.company.logo,
+        verified: user.company.verified,
+        plan: user.company.plan,
+        isFounder: user.company.isFounder,
+        trialEndDate: user.company.trialEndDate,
+        trades: user.company.trades?.map((ct: any) => ct.trade.name) || [],
+        certifications: user.company.certifications || []
+      } : undefined,
+    }))
+
     const totalPages = Math.ceil(totalCount / limit)
 
     return NextResponse.json({
       success: true,
-      users,
+      users: usersWithFounderStatus,
       pagination: {
         limit,
         offset: skip,

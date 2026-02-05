@@ -222,7 +222,16 @@ export async function POST(request: NextRequest) {
         })
       }
     } catch (ablyError) {
-      // Don't block
+      // Log Ably error but don't block the response
+      logError('Ably publish error', ablyError, {
+        endpoint: '/api/messages',
+        errorType: 'ably_publish_error',
+        severity: 'medium',
+        context: 'Failed to publish message or notification via Ably',
+        receiverId,
+        projectId,
+        stack: ablyError instanceof Error ? ablyError.stack : undefined
+      })
     }
 
     return NextResponse.json({ message: formattedMessage }, { status: 201 })

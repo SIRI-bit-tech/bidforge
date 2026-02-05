@@ -48,7 +48,6 @@ export function verifyJWT(token: string): { userId: string; role: string; compan
     
     // Runtime validation of payload structure
     if (!isValidJWTPayload(decoded)) {
-      // JWT verification failed: Invalid payload structure
       return null
     }
     
@@ -57,9 +56,7 @@ export function verifyJWT(token: string): { userId: string; role: string; compan
     // Secure error logging - don't expose sensitive information
     const isDevelopment = process.env.NODE_ENV === 'development'
     if (isDevelopment && error instanceof Error) {
-      // JWT verification failed: ${error.message}
-    } else {
-      // JWT verification failed: Invalid or expired token
+      // JWT verification failed in development
     }
     return null
   }

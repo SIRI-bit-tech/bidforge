@@ -1,6 +1,4 @@
 import { type GraphQLContext, requireAuth, requireRole } from "../context"
-import { projects, projectTrades } from "@/lib/db/schema"
-import { eq, and, gte, lte, sql } from "drizzle-orm"
 
 export const projectResolvers = {
   Query: {
@@ -9,61 +7,61 @@ export const projectResolvers = {
       { filter, limit = 50, offset = 0 }: { filter?: any; limit?: number; offset?: number },
       context: GraphQLContext,
     ) {
-      const conditions = []
+      const where: any = {}
 
       if (filter?.status) {
-        conditions.push(eq(projects.status, filter.status))
+        where.status = filter.status
       }
 
       if (filter?.budgetMin) {
-        conditions.push(gte(projects.budgetMin, filter.budgetMin))
+        where.budgetMin = { gte: filter.budgetMin }
       }
 
       if (filter?.budgetMax) {
-        conditions.push(lte(projects.budgetMax, filter.budgetMax))
+        where.budgetMax = { lte: filter.budgetMax }
       }
 
-      const result = await context.db.query.projects.findMany({
-        where: conditions.length > 0 ? and(...conditions) : undefined,
-        limit,
-        offset,
-        with: {
+      const result = await context.prisma.project.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        include: {
           createdBy: {
-            with: {
+            include: {
               company: true,
             },
           },
           trades: {
-            with: {
+            include: {
               trade: true,
             },
           },
           bids: true,
         },
-        orderBy: (projects, { desc }) => [desc(projects.createdAt)],
+        orderBy: { createdAt: 'desc' },
       })
 
       return result
     },
 
     async project(_: unknown, { id }: { id: string }, context: GraphQLContext) {
-      const project = await context.db.query.projects.findFirst({
-        where: eq(projects.id, id),
-        with: {
+      const project = await context.prisma.project.findFirst({
+        where: { id },
+        include: {
           createdBy: {
-            with: {
+            include: {
               company: true,
             },
           },
           trades: {
-            with: {
+            include: {
               trade: true,
             },
           },
           bids: {
-            with: {
+            include: {
               subcontractor: {
-                with: {
+                include: {
                   company: true,
                 },
               },
@@ -73,9 +71,9 @@ export const projectResolvers = {
           },
           documents: true,
           invitations: {
-            with: {
+            include: {
               subcontractor: {
-                with: {
+                include: {
                   company: true,
                 },
               },
@@ -90,17 +88,17 @@ export const projectResolvers = {
     async myProjects(_: unknown, __: unknown, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const result = await context.db.query.projects.findMany({
-        where: eq(projects.createdById, userId),
-        with: {
+      const result = await context.prisma.project.findMany({
+        where: { createdById: userId },
+        include: {
           trades: {
-            with: {
+            include: {
               trade: true,
             },
           },
           bids: true,
         },
-        orderBy: (projects, { desc }) => [desc(projects.createdAt)],
+        orderBy: { createdAt: 'desc' },
       })
 
       return result
@@ -113,9 +111,8 @@ export const projectResolvers = {
       requireRole(context, "CONTRACTOR")
 
       // Create project
-      const [project] = await context.db
-        .insert(projects)
-        .values({
+      const project = await context.prisma.project.create({
+        data: {
           title: input.title,
           description: input.description,
           location: input.location,
@@ -127,17 +124,17 @@ export const projectResolvers = {
           endDate: input.endDate,
           deadline: input.deadline,
           createdById: userId,
-        })
-        .returning()
+        },
+      })
 
       // Add trades
       if (input.tradeIds?.length > 0) {
-        await context.db.insert(projectTrades).values(
-          input.tradeIds.map((tradeId: string) => ({
+        await context.prisma.projectTrade.createMany({
+          data: input.tradeIds.map((tradeId: string) => ({
             projectId: project.id,
             tradeId,
           })),
-        )
+        })
       }
 
       return project
@@ -147,8 +144,8 @@ export const projectResolvers = {
       const userId = requireAuth(context)
 
       // Verify ownership
-      const project = await context.db.query.projects.findFirst({
-        where: eq(projects.id, id),
+      const project = await context.prisma.project.findFirst({
+        where: { id },
       })
 
       if (!project || project.createdById !== userId) {
@@ -156,14 +153,13 @@ export const projectResolvers = {
       }
 
       // Update project
-      const [updated] = await context.db
-        .update(projects)
-        .set({
+      const updated = await context.prisma.project.update({
+        where: { id },
+        data: {
           ...input,
           updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id))
-        .returning()
+        },
+      })
 
       return updated
     },
@@ -171,39 +167,58 @@ export const projectResolvers = {
     async publishProject(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [updated] = await context.db
-        .update(projects)
-        .set({ status: "PUBLISHED", updatedAt: new Date() })
-        .where(and(eq(projects.id, id), eq(projects.createdById, userId)))
-        .returning()
+      const updated = await context.prisma.project.updateMany({
+        where: {
+          id,
+          createdById: userId,
+        },
+        data: {
+          status: "PUBLISHED",
+          updatedAt: new Date(),
+        },
+      })
 
-      if (!updated) {
+      if (updated.count === 0) {
         throw new Error("Project not found or access denied")
       }
 
-      return updated
+      return await context.prisma.project.findUnique({ where: { id } })
     },
 
     async closeProject(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [updated] = await context.db
-        .update(projects)
-        .set({ status: "CLOSED", updatedAt: new Date() })
-        .where(and(eq(projects.id, id), eq(projects.createdById, userId)))
-        .returning()
+      const updated = await context.prisma.project.updateMany({
+        where: {
+          id,
+          createdById: userId,
+        },
+        data: {
+          status: "CLOSED",
+          updatedAt: new Date(),
+        },
+      })
 
-      if (!updated) {
+      if (updated.count === 0) {
         throw new Error("Project not found or access denied")
       }
 
-      return updated
+      return await context.prisma.project.findUnique({ where: { id } })
     },
 
     async deleteProject(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      await context.db.delete(projects).where(and(eq(projects.id, id), eq(projects.createdById, userId)))
+      const deleted = await context.prisma.project.deleteMany({
+        where: {
+          id,
+          createdById: userId,
+        },
+      })
+
+      if (deleted.count === 0) {
+        throw new Error("Project not found or access denied")
+      }
 
       return true
     },
@@ -211,9 +226,9 @@ export const projectResolvers = {
 
   Project: {
     async trades(parent: any, _: unknown, context: GraphQLContext) {
-      const result = await context.db.query.projectTrades.findMany({
-        where: eq(projectTrades.projectId, parent.id),
-        with: {
+      const result = await context.prisma.projectTrade.findMany({
+        where: { projectId: parent.id },
+        include: {
           trade: true,
         },
       })
@@ -222,21 +237,22 @@ export const projectResolvers = {
     },
 
     async bidCount(parent: any, _: unknown, context: GraphQLContext) {
-      const result = await context.db
-        .select({ count: sql<number>`count(*)` })
-        .from(projects)
-        .where(eq(projects.id, parent.id))
+      const count = await context.prisma.bid.count({
+        where: { projectId: parent.id },
+      })
 
-      return result[0]?.count || 0
+      return count
     },
 
     async averageBid(parent: any, _: unknown, context: GraphQLContext) {
-      const result = await context.db
-        .select({ avg: sql<number>`avg(total_amount)` })
-        .from(projects)
-        .where(eq(projects.id, parent.id))
+      const result = await context.prisma.bid.aggregate({
+        where: { projectId: parent.id },
+        _avg: {
+          totalAmount: true,
+        },
+      })
 
-      return result[0]?.avg || null
+      return result._avg.totalAmount || null
     },
   },
 }

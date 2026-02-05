@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -77,8 +78,10 @@ model User {
   uploadedDocs     Document[]
   verificationCodes VerificationCode[]
   invitations      Invitation[]
+  adminSessions    AdminSession[]
 
   @@index([companyId])
+  @@index([role])
   @@map("users")
 }
 
@@ -98,6 +101,9 @@ model Company {
   subscriptionStatus SubscriptionStatus @default(INACTIVE) @map("subscription_status")
   storageUsed        Int                @default(0) @map("storage_used")
   verified           Boolean            @default(false)
+  trialStartDate     DateTime?          @map("trial_start_date")
+  trialEndDate       DateTime?          @map("trial_end_date")
+  isFounder          Boolean            @default(false) @map("is_founder")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at")
   users              User[]
@@ -106,6 +112,7 @@ model Company {
   trades             CompanyTrade[]
 
   @@index([plan])
+  @@index([trialEndDate])
   @@map("companies")
 }
 
@@ -157,6 +164,7 @@ model ProjectTrade {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   trade     Trade   @relation(fields: [tradeId], references: [id])
 
+  @@unique([projectId, tradeId])
   @@index([projectId])
   @@index([tradeId])
   @@map("project_trades")
@@ -333,7 +341,34 @@ model CompanyTrade {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   trade     Trade   @relation(fields: [tradeId], references: [id])
 
+  @@unique([companyId, tradeId])
   @@index([companyId])
   @@index([tradeId])
   @@map("company_trades")
+}
+
+model Waitlist {
+  id      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email   String    @unique @db.VarChar(255)
+  addedAt DateTime  @default(now()) @map("added_at")
+  usedAt  DateTime? @map("used_at")
+  isUsed  Boolean   @default(false) @map("is_used")
+  addedBy String?   @map("added_by") @db.Uuid // Admin who added this email
+
+  @@index([email])
+  @@index([isUsed])
+  @@map("waitlist")
+}
+
+model AdminSession {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  token     String   @unique
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("admin_sessions")
 }

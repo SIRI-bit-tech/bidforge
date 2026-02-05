@@ -1,18 +1,16 @@
 import DataLoader from "dataloader"
-import { db } from "@/lib/db"
-import { users, companies, projects, bids, trades } from "@/lib/db/schema"
-import { inArray } from "drizzle-orm"
+import prisma from "@/lib/prisma"
 
 // DataLoader for users - prevents N+1 queries when fetching user relationships
 export function createUserLoader() {
   return new DataLoader(async (userIds: readonly string[]) => {
-    const usersData = await db.query.users.findMany({
-      where: inArray(users.id, [...userIds]),
-      with: {
+    const usersData = await prisma.user.findMany({
+      where: { id: { in: [...userIds] } },
+      include: {
         company: {
-          with: {
+          include: {
             trades: {
-              with: {
+              include: {
                 trade: true,
               },
             },
@@ -32,11 +30,11 @@ export function createUserLoader() {
 // DataLoader for companies - optimizes company fetching
 export function createCompanyLoader() {
   return new DataLoader(async (companyIds: readonly string[]) => {
-    const companiesData = await db.query.companies.findMany({
-      where: inArray(companies.id, [...companyIds]),
-      with: {
+    const companiesData = await prisma.company.findMany({
+      where: { id: { in: [...companyIds] } },
+      include: {
         trades: {
-          with: {
+          include: {
             trade: true,
           },
         },
@@ -53,12 +51,12 @@ export function createCompanyLoader() {
 // DataLoader for projects - batch loads projects with relations
 export function createProjectLoader() {
   return new DataLoader(async (projectIds: readonly string[]) => {
-    const projectsData = await db.query.projects.findMany({
-      where: inArray(projects.id, [...projectIds]),
-      with: {
+    const projectsData = await prisma.project.findMany({
+      where: { id: { in: [...projectIds] } },
+      include: {
         createdBy: true,
         trades: {
-          with: {
+          include: {
             trade: true,
           },
         },
@@ -74,11 +72,11 @@ export function createProjectLoader() {
 // DataLoader for bids - optimizes bid fetching with line items
 export function createBidLoader() {
   return new DataLoader(async (bidIds: readonly string[]) => {
-    const bidsData = await db.query.bids.findMany({
-      where: inArray(bids.id, [...bidIds]),
-      with: {
+    const bidsData = await prisma.bid.findMany({
+      where: { id: { in: [...bidIds] } },
+      include: {
         subcontractor: {
-          with: {
+          include: {
             company: true,
           },
         },
@@ -95,8 +93,8 @@ export function createBidLoader() {
 // DataLoader for trades - caches trade lookups
 export function createTradeLoader() {
   return new DataLoader(async (tradeIds: readonly string[]) => {
-    const tradesData = await db.query.trades.findMany({
-      where: inArray(trades.id, [...tradeIds]),
+    const tradesData = await prisma.trade.findMany({
+      where: { id: { in: [...tradeIds] } },
     })
 
     const tradeMap = new Map(tradesData.map((trade) => [trade.id, trade]))

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, notifications } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function PATCH(
@@ -29,16 +28,12 @@ export async function PATCH(
     const { id: notificationId } = await params
 
     // Verify the notification exists and belongs to the authenticated user
-    const [notification] = await db
-      .select()
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.id, notificationId),
-          eq(notifications.userId, payload.userId)
-        )
-      )
-      .limit(1)
+    const notification = await prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        userId: payload.userId
+      }
+    })
 
     if (!notification) {
       return NextResponse.json(
@@ -48,10 +43,10 @@ export async function PATCH(
     }
 
     // Mark notification as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(eq(notifications.id, notificationId))
+    await prisma.notification.update({
+      where: { id: notificationId },
+      data: { read: true }
+    })
 
     return NextResponse.json({
       success: true,

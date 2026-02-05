@@ -31,7 +31,18 @@ export async function POST(request: NextRequest) {
 
     // Find user by email using Prisma
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: email.toLowerCase() },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            plan: true,
+            isFounder: true,
+            trialEndDate: true,
+          }
+        }
+      }
     })
 
     if (!user) {
@@ -83,6 +94,8 @@ export async function POST(request: NextRequest) {
         role: user.role,
         emailVerified: user.emailVerified,
         companyId: user.companyId,
+        isFounder: user.company?.isFounder || false, // Include founder status
+        company: user.company, // Include company data
       }
     })
 

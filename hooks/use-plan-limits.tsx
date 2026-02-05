@@ -4,6 +4,22 @@ import { useStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 
+/**
+ * Check if user has special access (founder or trial)
+ */
+function hasSpecialAccess(currentUser: any, company: any): boolean {
+  if (!currentUser) return false
+  
+  // Check if user is founder (determined server-side for security)
+  const isFounder = currentUser?.isFounder || false
+  
+  // Check if company is in trial period
+  const isInTrial = company?.trialEndDate ? 
+    new Date(company.trialEndDate) > new Date() : false
+  
+  return isFounder || isInTrial
+}
+
 export function usePlanLimits() {
     const { currentUser, companies, projects, bids } = useStore()
     const { toast } = useToast()
@@ -11,6 +27,9 @@ export function usePlanLimits() {
 
     const company = companies.find((c) => c.id === currentUser?.companyId)
     const userPlan = company?.plan || "FREE"
+
+    // Check if user has special access
+    const hasAccess = hasSpecialAccess(currentUser, company)
 
     const limits = {
         CONTRACTOR: {
@@ -51,6 +70,9 @@ export function usePlanLimits() {
 
     const checkLimit = (feature: string) => {
         if (!currentUser) return false
+
+        // Founder and trial users get full access
+        if (hasAccess) return true
 
         const roleLimits = (limits as any)[currentUser.role][userPlan]
 
@@ -101,6 +123,9 @@ export function usePlanLimits() {
     }
 
     const showUpgradeToast = (title: string, description: string) => {
+        // Don't show upgrade prompts to founders or trial users
+        if (hasAccess) return
+
         // Calculate next reset date for monthly limits
         const now = new Date()
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -127,5 +152,17 @@ export function usePlanLimits() {
         })
     }
 
-    return { checkLimit, userPlan, limits: (limits as any)[currentUser?.role || "CONTRACTOR"][userPlan] }
+    // Get effective limits (Pro limits for special access users)
+    const effectiveLimits = hasAccess 
+        ? (limits as any)[currentUser?.role || "CONTRACTOR"]["PRO"]
+        : (limits as any)[currentUser?.role || "CONTRACTOR"][userPlan]
+
+    return { 
+        checkLimit, 
+        userPlan: hasAccess ? "PRO" : userPlan, 
+        limits: effectiveLimits,
+        isFounder: currentUser?.isFounder || false,
+        isInTrial: hasAccess && company?.trialEndDate && new Date(company.trialEndDate) > new Date(),
+        hasSpecialAccess: hasAccess
+    }
 }

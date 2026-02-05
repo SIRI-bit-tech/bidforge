@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BidCard } from "@/components/bid-card"
+import { BidComparisonView } from "@/components/bid-comparison/bid-comparison-view"
 import { EmptyState } from "@/components/empty-state"
 import { StatusBadge } from "@/components/status-badge"
 import { DocumentUpload } from "@/components/document-upload"
@@ -25,6 +26,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
+  const [showBidComparison, setShowBidComparison] = useState(false)
   const [projectBids, setProjectBids] = useState<any[]>([])
   const { userPlan } = usePlanLimits()
 
@@ -47,7 +49,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
 
     loadData()
-  }, [loadProjects, loadBids, id, currentUser])
+  }, [id, currentUser, loadProjects, loadBids])
+
+  const handleViewBid = (bidId: string) => {
+    router.push(`/projects/${project?.id}/bids/${bidId}`)
+  }
+
+  const handleAwardBid = async (bidId: string) => {
+    // TODO: Implement bid awarding logic
+    console.log('Award bid:', bidId)
+  }
 
   const project = projects.find((p) => p.id === id)
 
@@ -198,71 +209,52 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4 lg:p-6">
-            <h2 className="text-lg lg:text-xl font-semibold mb-4">
-              {isProjectOwner ? `Bids Received (${projectBids.length})` : 'Project Bids'}
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg lg:text-xl font-semibold">
+                {isProjectOwner ? `Bids Received (${projectBids.length})` : 'Project Bids'}
+              </h2>
+              {isProjectOwner && projectBids.length > 1 && (
+                <div className="flex gap-2">
+                  <Button
+                    variant={showBidComparison ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowBidComparison(true)}
+                  >
+                    Compare Bids
+                  </Button>
+                  <Button
+                    variant={!showBidComparison ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowBidComparison(false)}
+                  >
+                    List View
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {projectBids.length > 0 ? (
               <>
-                {/* Only show bid statistics to project owner */}
-                {isProjectOwner && (
-                  <div className="relative overflow-hidden rounded-lg border border-border p-6 mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Bid Comparison</h3>
-                      {userPlan === "FREE" && (
-                        <Badge variant="outline" className="text-[10px] bg-accent/5 text-accent border-accent/20">
-                          PRO FEATURE
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className={cn(
-                      "grid grid-cols-1 lg:grid-cols-3 gap-4 transition-all duration-300",
-                      userPlan === "FREE" ? "blur-[5px] opacity-40 select-none grayscale" : ""
-                    )}>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1 uppercase">Average Bid</div>
-                        <div className="text-xl font-bold">{formatCurrency(avgBidAmount)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1 uppercase">Lowest Bid</div>
-                        <div className="text-xl font-bold text-success">{formatCurrency(lowestBid)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1 uppercase">Highest Bid</div>
-                        <div className="text-xl font-bold text-destructive">{formatCurrency(highestBid)}</div>
-                      </div>
-                    </div>
-
-                    {userPlan === "FREE" && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/20 backdrop-blur-[1px] p-4 text-center">
-                        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent mb-2">
-                          <Lock className="h-5 w-5" />
-                        </div>
-                        <p className="text-sm font-bold mb-1">Detailed Bid Analysis</p>
-                        <p className="text-[11px] text-muted-foreground mb-3 max-w-[200px]">
-                          Upgrade to Pro to compare all bids side-by-side.
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-xs border-accent text-accent hover:bg-accent hover:text-white"
-                          onClick={() => router.push("/pricing")}
-                        >
-                          Unlock Advanced Tools
-                        </Button>
-                      </div>
-                    )}
+                {/* Show comparison view or individual cards */}
+                {isProjectOwner && showBidComparison && projectBids.length > 1 ? (
+                  <BidComparisonView
+                    projectId={project?.id || ''}
+                    bids={projectBids}
+                    companies={companies}
+                    users={users}
+                    onViewBid={handleViewBid}
+                    onAwardBid={handleAwardBid}
+                    canAward={isProjectOwner}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {projectBids.map((bid) => {
+                      const subcontractor = users.find((u) => u.id === bid.subcontractorId)
+                      const company = subcontractor ? companies.find((c) => c.id === subcontractor.companyId) : undefined
+                      return <BidCard key={bid.id} bid={bid} company={company} />
+                    })}
                   </div>
                 )}
-
-                <div className="space-y-4">
-                  {projectBids.map((bid) => {
-                    const subcontractor = users.find((u) => u.id === bid.subcontractorId)
-                    const company = subcontractor ? companies.find((c) => c.id === subcontractor.companyId) : undefined
-                    return <BidCard key={bid.id} bid={bid} company={company} />
-                  })}
-                </div>
               </>
             ) : (
               <EmptyState

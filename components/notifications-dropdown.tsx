@@ -47,11 +47,14 @@ export function NotificationsDropdown() {
     // For subsequent updates, animate when unread count increases
     if (unreadCount > prevUnreadCount) {
       setHasNewNotification(true)
+      // Update prevUnreadCount immediately to prevent repeated triggers
+      setPrevUnreadCount(unreadCount)
       // Reset animation after 3 seconds
       const timer = setTimeout(() => setHasNewNotification(false), 3000)
       return () => clearTimeout(timer)
     }
 
+    // Update prevUnreadCount for other cases (decreases or no change)
     setPrevUnreadCount(unreadCount)
   }, [unreadCount])
 

@@ -1,6 +1,4 @@
 import { type GraphQLContext, requireAuth } from "../context"
-import { notifications } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
 
 export const notificationResolvers = {
   Query: {
@@ -8,16 +6,16 @@ export const notificationResolvers = {
     async notifications(_: unknown, { unreadOnly = false }: { unreadOnly?: boolean }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const conditions = [eq(notifications.userId, userId)]
+      const where: any = { userId }
 
       if (unreadOnly) {
-        conditions.push(eq(notifications.read, false))
+        where.read = false
       }
 
-      const result = await context.db.query.notifications.findMany({
-        where: and(...conditions),
-        orderBy: (notifications, { desc }) => [desc(notifications.createdAt)],
-        limit: 50,
+      const result = await context.prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 50,
       })
 
       return result
@@ -29,27 +27,33 @@ export const notificationResolvers = {
     async markNotificationAsRead(_: unknown, { id }: { id: string }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [updated] = await context.db
-        .update(notifications)
-        .set({ read: true })
-        .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
-        .returning()
+      const updated = await context.prisma.notification.updateMany({
+        where: { 
+          id, 
+          userId 
+        },
+        data: { read: true }
+      })
 
-      if (!updated) {
+      if (updated.count === 0) {
         throw new Error("Notification not found or access denied")
       }
 
-      return updated
+      const notification = await context.prisma.notification.findUnique({ where: { id } })
+      return notification
     },
 
     // Mark all notifications as read
     async markAllNotificationsAsRead(_: unknown, __: unknown, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      await context.db
-        .update(notifications)
-        .set({ read: true })
-        .where(and(eq(notifications.userId, userId), eq(notifications.read, false)))
+      await context.prisma.notification.updateMany({
+        where: { 
+          userId, 
+          read: false 
+        },
+        data: { read: true }
+      })
 
       return true
     },

@@ -211,7 +211,7 @@ export default function HomePage() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <img 
-                  src="/bidforge-logo-horizontal.svg" 
+                  src="/logo.png" 
                   alt="BidForge" 
                   className="h-6 w-auto"
                 />

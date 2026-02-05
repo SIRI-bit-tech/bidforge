@@ -43,6 +43,7 @@ interface AppState {
 
   // Data loading actions
   loadUsers: () => Promise<User[]>
+  loadAllUsers: () => Promise<User[]>
   loadCompanies: () => Promise<Company[]>
   loadProjects: () => Promise<Project[]>
   loadSubcontractors: () => Promise<User[]>
@@ -153,6 +154,11 @@ export const useStore = create<AppState>((set, get) => ({
         ...data.user,
         createdAt: new Date(data.user.createdAt),
         updatedAt: new Date(data.user.updatedAt),
+        isFounder: data.user.isFounder || false, // Ensure isFounder is preserved
+        company: data.user.company ? {
+          ...data.user.company,
+          trialEndDate: data.user.company.trialEndDate ? new Date(data.user.company.trialEndDate) : null
+        } : undefined, // Handle company data
       }
 
       set({ currentUser: user, isAuthenticated: true })
@@ -299,6 +305,11 @@ export const useStore = create<AppState>((set, get) => ({
         ...data.user,
         createdAt: new Date(data.user.createdAt),
         updatedAt: new Date(data.user.updatedAt),
+        isFounder: data.user.isFounder || false, // Ensure isFounder is preserved
+        company: data.user.company ? {
+          ...data.user.company,
+          trialEndDate: data.user.company.trialEndDate ? new Date(data.user.company.trialEndDate) : null
+        } : undefined, // Handle company data
       }
 
       set({ currentUser: user, isAuthenticated: true })
@@ -348,6 +359,57 @@ export const useStore = create<AppState>((set, get) => ({
       return users
     } catch (error) {
       // Failed to load users
+      return []
+    }
+  },
+
+  // Load all users for messaging (ignores role restrictions)
+  loadAllUsers: async () => {
+    try {
+      const currentUser = get().currentUser
+      if (!currentUser) return []
+
+      let allUsers: any[] = []
+
+      // If user is admin, load all users
+      if (currentUser.role === 'ADMIN') {
+        const response = await fetch('/api/users')
+        const data = await response.json()
+        if (response.ok) {
+          allUsers = data.users
+        }
+      } else {
+        // For non-admin users, load both contractors and subcontractors
+        const [contractorsResponse, subcontractorsResponse] = await Promise.all([
+          fetch('/api/users?role=CONTRACTOR'),
+          fetch('/api/users?role=SUBCONTRACTOR')
+        ])
+
+        const contractorsData = contractorsResponse.ok ? await contractorsResponse.json() : { users: [] }
+        const subcontractorsData = subcontractorsResponse.ok ? await subcontractorsResponse.json() : { users: [] }
+
+        // Combine both arrays and remove duplicates
+        const contractors = contractorsData.users || []
+        const subcontractors = subcontractorsData.users || []
+        
+        allUsers = [...contractors, ...subcontractors]
+        
+        // Remove duplicates based on user ID
+        const userMap = new Map()
+        allUsers.forEach(user => userMap.set(user.id, user))
+        allUsers = Array.from(userMap.values())
+      }
+
+      const users = allUsers.map((user: any) => ({
+        ...user,
+        createdAt: new Date(user.createdAt),
+        updatedAt: new Date(user.updatedAt),
+      }))
+
+      set({ users })
+      return users
+    } catch (error) {
+      console.error('Failed to load all users:', error)
       return []
     }
   },
@@ -414,6 +476,11 @@ export const useStore = create<AppState>((set, get) => ({
         ...user,
         createdAt: new Date(user.createdAt),
         updatedAt: new Date(user.updatedAt),
+        // Handle company trialEndDate if present
+        company: user.company ? {
+          ...user.company,
+          trialEndDate: user.company.trialEndDate ? new Date(user.company.trialEndDate) : null
+        } : undefined,
       }))
 
       // Update users array with subcontractors
@@ -448,6 +515,7 @@ export const useStore = create<AppState>((set, get) => ({
       subscriptionStatus: "INACTIVE",
       storageUsed: 0,
       verified: false,
+      isFounder: false,
       createdAt: new Date(),
     }
     set((state) => ({ companies: [...state.companies, newCompany] }))
@@ -570,6 +638,7 @@ export const useStore = create<AppState>((set, get) => ({
       status: "DRAFT",
       notes: data.notes,
       submittedAt: undefined,
+      createdAt: new Date(),
       updatedAt: new Date(),
       lineItems: data.lineItems || [],
       alternates: data.alternates || [],
@@ -886,7 +955,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   getMessagesByUser: async (userId: string) => {
     try {
-      const response = await fetch(`/api/messages?userId=${userId}`)
+      // The API uses the authenticated user's ID from the JWT token, not the userId parameter
+      const response = await fetch('/api/messages')
       const result = await response.json()
 
       if (!response.ok) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, notifications } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function PATCH(request: NextRequest) {
@@ -42,10 +41,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Mark all notifications as read for the user
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(eq(notifications.userId, userId))
+    await prisma.notification.updateMany({
+      where: { userId },
+      data: { read: true }
+    })
 
     return NextResponse.json({
       success: true,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, messages } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
+import Ably from 'ably'
 
 export async function PATCH(
   request: NextRequest,
@@ -33,16 +33,15 @@ export async function PATCH(
     }
 
     // Fetch the message by id to verify ownership
-    const [message] = await db
-      .select({
-        id: messages.id,
-        receiverId: messages.receiverId,
-        senderId: messages.senderId,
-        read: messages.read
-      })
-      .from(messages)
-      .where(eq(messages.id, id))
-      .limit(1)
+    const message = await prisma.message.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        receiverId: true,
+        senderId: true,
+        read: true
+      }
+    })
 
     if (!message) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 })
@@ -62,14 +61,29 @@ export async function PATCH(
     }
 
     // Only perform update after authentication and authorization checks pass
-    const [updatedMessage] = await db
-      .update(messages)
-      .set({ read: true })
-      .where(eq(messages.id, id))
-      .returning()
+    const updatedMessage = await prisma.message.update({
+      where: { id },
+      data: { read: true }
+    })
 
     if (!updatedMessage) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+    }
+
+    // Publish read receipt via Ably
+    if (process.env.ABLY_API_KEY) {
+      try {
+        const client = new Ably.Rest(process.env.ABLY_API_KEY)
+        // Notify the sender that their message was read
+        const channel = client.channels.get(`messages:${updatedMessage.senderId}`)
+        await channel.publish('message-read', {
+          messageId: updatedMessage.id,
+          readBy: payload.userId,
+          readAt: new Date().toISOString()
+        })
+      } catch (e) {
+        console.error('Failed to publish read receipt via Ably', e)
+      }
     }
 
     return NextResponse.json({ message: updatedMessage })

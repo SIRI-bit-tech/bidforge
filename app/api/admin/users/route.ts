@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { verifyAdminToken } from "@/lib/utils/admin-auth"
 import { AdminUser } from "@/lib/types"
+import { logInfo } from "@/lib/logger"
 
 /**
  * Get all users with admin view
@@ -124,12 +125,41 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate allowed updates
-    const allowedFields = ["name", "email", "role", "emailVerified"]
+    const allowedFields = ["name", "email", "emailVerified"] // Removed "role" to handle it separately
     const filteredUpdates: any = {}
+
+    // First fetch the current user state if role is being updated
+    let currentUserState = null
+    if (Object.keys(updates).includes("role")) {
+      currentUserState = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true }
+      })
+    }
 
     for (const [key, value] of Object.entries(updates)) {
       if (allowedFields.includes(key)) {
         filteredUpdates[key] = value
+      } else if (key === "role") {
+        // Special handling for role updates
+        if (value === "ADMIN") {
+          return NextResponse.json(
+            { success: false, error: "Cannot promote users to ADMIN role via this endpoint" },
+            { status: 403 }
+          )
+        }
+
+        // Audit log for role changes
+        if (currentUserState && currentUserState.role !== value) {
+          logInfo("Admin changed user role", {
+            adminId: adminUser.id,
+            targetUserId: userId,
+            oldRole: currentUserState.role,
+            newRole: value,
+            timestamp: new Date().toISOString()
+          })
+          filteredUpdates[key] = value
+        }
       }
     }
 

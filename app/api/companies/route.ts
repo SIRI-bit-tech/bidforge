@@ -111,6 +111,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let normalizedTrades: string[] = []
+
+    // Normalize trades input
+    if (trades === undefined || trades === null) {
+      normalizedTrades = []
+    } else if (Array.isArray(trades)) {
+      normalizedTrades = trades.filter((t: any) => typeof t === 'string')
+    } else if (typeof trades === 'string') {
+      normalizedTrades = [trades]
+    } else {
+      return NextResponse.json(
+        { error: 'Invalid format for trades. Must be a string or array of strings.' },
+        { status: 400 }
+      )
+    }
+
     // Create company using Prisma transaction with increased timeout
     const result = await prisma.$transaction(async (tx) => {
       // Create the company
@@ -126,16 +142,16 @@ export async function POST(request: NextRequest) {
       })
 
       // Add trades if provided - optimize by batching operations
-      if (trades && trades.length > 0) {
+      if (normalizedTrades.length > 0) {
         // Get existing trades and create missing ones in batch
         const existingTrades = await tx.trade.findMany({
           where: {
-            name: { in: trades }
+            name: { in: normalizedTrades }
           }
         })
 
         const existingTradeNames = existingTrades.map(t => t.name)
-        const missingTradeNames = trades.filter((name: string) => !existingTradeNames.includes(name))
+        const missingTradeNames = normalizedTrades.filter((name: string) => !existingTradeNames.includes(name))
 
         // Create missing trades in batch
         if (missingTradeNames.length > 0) {
@@ -148,7 +164,7 @@ export async function POST(request: NextRequest) {
         // Get all trade IDs
         const allTrades = await tx.trade.findMany({
           where: {
-            name: { in: trades }
+            name: { in: normalizedTrades }
           }
         })
 

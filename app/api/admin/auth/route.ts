@@ -11,8 +11,29 @@ const ADMIN_SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
  * Admin login endpoint
  * Authenticates admin users and creates secure sessions
  */
+import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from "@/lib/utils/rate-limit"
+import { cache } from "@/lib/cache/redis"
+
+// ... imports
+
+/**
+ * Admin login endpoint
+ * Authenticates admin users and creates secure sessions
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.LOGIN.keyPrefix)
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.LOGIN)
+
+    if (!rateLimit.allowed) {
+      const resetIn = formatTimeRemaining(rateLimit.resetTime!)
+      return NextResponse.json(
+        { success: false, error: `Too many login attempts. Please try again in ${resetIn}.` },
+        { status: 429 }
+      )
+    }
+
     const body: AdminLoginRequest = await request.json()
     const { email, password } = body
 
@@ -50,6 +71,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Reset rate limit on successful login
+    await cache.del(rateLimitKey)
+
     // Create session token
     const token = jwt.sign(
       { userId: user.id, role: user.role },
@@ -76,16 +100,24 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const response: AdminLoginResponse = {
+    const response = NextResponse.json({
       success: true,
-      token,
       user: {
         ...user,
         passwordHash: undefined, // Don't send password hash
       } as any,
-    }
+    })
 
-    return NextResponse.json(response)
+    // Set HTTP-only cookie
+    response.cookies.set("admin_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: ADMIN_SESSION_DURATION / 1000, // Convert to seconds
+    })
+
+    return response
   } catch (error) {
     console.error("Admin login error:", error)
     return NextResponse.json(
@@ -101,22 +133,20 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "No token provided" },
-        { status: 401 }
-      )
+    const token = request.cookies.get("admin_token")?.value
+    if (!token) {
+      return NextResponse.json({ success: true }) // Already logged out effectively
     }
-
-    const token = authHeader.substring(7)
 
     // Remove session from database
     await prisma.adminSession.deleteMany({
       where: { token },
     })
 
-    return NextResponse.json({ success: true })
+    const response = NextResponse.json({ success: true })
+    response.cookies.delete("admin_token")
+
+    return response
   } catch (error) {
     console.error("Admin logout error:", error)
     return NextResponse.json(
@@ -132,15 +162,14 @@ export async function DELETE(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
+    const token = request.cookies.get("admin_token")?.value
+
+    if (!token) {
       return NextResponse.json(
         { success: false, error: "No token provided" },
         { status: 401 }
       )
     }
-
-    const token = authHeader.substring(7)
 
     // Verify session exists and is not expired
     const session = await prisma.adminSession.findFirst({

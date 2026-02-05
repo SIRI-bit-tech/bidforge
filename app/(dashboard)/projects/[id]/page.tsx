@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
+import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BidCard } from "@/components/bid-card"
@@ -22,8 +23,10 @@ import { Lock } from "lucide-react"
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { projects, companies, users, publishProject, closeProject, loadProjects, loadBids, currentUser } = useStore()
+  const { projects, companies, users, publishProject, closeProject, loadProjects, loadBids, awardBid, currentUser } = useStore()
   const [loading, setLoading] = useState(true)
+  const [isAwarding, setIsAwarding] = useState(false)
+  const { toast } = useToast()
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
   const [showBidComparison, setShowBidComparison] = useState(false)
@@ -56,8 +59,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleAwardBid = async (bidId: string) => {
-    // TODO: Implement bid awarding logic
-    console.log('Award bid:', bidId)
+    try {
+      setIsAwarding(true)
+      await awardBid(bidId)
+
+      toast({
+        title: "Bid Awarded",
+        description: "The project has been awarded successfully.",
+      })
+
+      // Refresh data to ensure consistency with backend
+      await Promise.all([
+        loadProjects(),
+        loadBids(id)
+      ])
+
+      router.refresh()
+      setShowBidComparison(false)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to award bid. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAwarding(false)
+    }
   }
 
   const project = projects.find((p) => p.id === id)

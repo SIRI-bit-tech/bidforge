@@ -88,10 +88,11 @@ export async function POST(request: NextRequest) {
     const verificationData = generateVerificationData()
 
     // Check if email is in waitlist for trial access
-    const waitlistEntry = await prisma.waitlist.findUnique({
-      where: { 
+    // Check if email is in waitlist for trial access
+    const waitlistEntry = await prisma.waitlist.findFirst({
+      where: {
         email: email.toLowerCase(),
-        isUsed: false 
+        isUsed: false
       }
     })
 

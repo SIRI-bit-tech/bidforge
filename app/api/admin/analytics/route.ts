@@ -129,7 +129,13 @@ export async function GET(request: NextRequest) {
             gte: sevenDaysAgo,
           },
         },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          emailVerified: true,
           company: true,
         },
         orderBy: {
@@ -192,10 +198,7 @@ export async function GET(request: NextRequest) {
           bids: recentBids,
         },
         recent: {
-          users: recentUsers.map(user => ({
-            ...user,
-            passwordHash: undefined, // Don't send password hash
-          })),
+          users: recentUsers,
           companies: recentCompanies,
           projects: recentProjectsList,
         },

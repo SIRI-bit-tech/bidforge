@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, companies } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import { logError } from '@/lib/logger'
 
@@ -39,16 +38,16 @@ export async function PATCH(
         }
 
         // Update company plan in DB
-        const updated = await db.update(companies)
-            .set({
+        const updated = await prisma.company.update({
+            where: { id },
+            data: {
                 plan,
                 subscriptionStatus: 'ACTIVE',
                 updatedAt: new Date()
-            })
-            .where(eq(companies.id, id))
-            .returning()
+            }
+        })
 
-        if (!updated.length) {
+        if (!updated) {
             return NextResponse.json({
                 success: false,
                 message: 'Company not found'

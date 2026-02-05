@@ -1,6 +1,4 @@
 import { type GraphQLContext, requireAuth } from "../context"
-import { companies, companyTrades, users } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
 
 export const companyResolvers = {
   Query: {
@@ -12,16 +10,27 @@ export const companyResolvers = {
     ) {
       requireAuth(context)
 
-      // Build query conditions
-      const conditions = [eq(users.role, "SUBCONTRACTOR")]
+      // Build where clause for database filtering when possible
+      const where: any = { role: "SUBCONTRACTOR" }
+      
+      // Add company filters to the database query when possible
+      if (city || state) {
+        where.company = {}
+        if (city) {
+          where.company.city = { equals: city, mode: 'insensitive' }
+        }
+        if (state) {
+          where.company.state = { equals: state, mode: 'insensitive' }
+        }
+      }
 
-      const result = await context.db.query.users.findMany({
-        where: eq(users.role, "SUBCONTRACTOR"),
-        with: {
+      const result = await context.prisma.user.findMany({
+        where,
+        include: {
           company: {
-            with: {
+            include: {
               trades: {
-                with: {
+                include: {
                   trade: true,
                 },
               },
@@ -30,22 +39,16 @@ export const companyResolvers = {
             },
           },
         },
-        limit: 100,
-      })
+        take: 100,
+      }) as any[] // Type assertion to handle the included relations
 
-      // Filter by trade, city, state if provided
+      // Filter by trade if provided (needs to be done in memory due to complex relation)
       let filtered = result
 
       if (tradeId) {
-        filtered = filtered.filter((user) => user.company?.trades?.some((ct: any) => ct.trade?.id === tradeId))
-      }
-
-      if (city) {
-        filtered = filtered.filter((user) => user.company?.city?.toLowerCase() === city.toLowerCase())
-      }
-
-      if (state) {
-        filtered = filtered.filter((user) => user.company?.state?.toLowerCase() === state.toLowerCase())
+        filtered = filtered.filter((user) => 
+          user.company?.trades?.some((ct: any) => ct.trade?.id === tradeId)
+        )
       }
 
       return filtered
@@ -70,9 +73,8 @@ export const companyResolvers = {
     async createCompany(_: unknown, { input }: { input: any }, context: GraphQLContext) {
       const userId = requireAuth(context)
 
-      const [company] = await context.db
-        .insert(companies)
-        .values({
+      const company = await context.prisma.company.create({
+        data: {
           name: input.name,
           type: input.type,
           address: input.address,
@@ -82,20 +84,23 @@ export const companyResolvers = {
           phone: input.phone,
           website: input.website,
           description: input.description,
-        })
-        .returning()
+        }
+      })
 
       // Link company to user
-      await context.db.update(users).set({ companyId: company.id }).where(eq(users.id, userId))
+      await context.prisma.user.update({
+        where: { id: userId },
+        data: { companyId: company.id }
+      })
 
       // Add trades if provided
       if (input.tradeIds?.length > 0) {
-        await context.db.insert(companyTrades).values(
-          input.tradeIds.map((tradeId: string) => ({
+        await context.prisma.companyTrade.createMany({
+          data: input.tradeIds.map((tradeId: string) => ({
             companyId: company.id,
             tradeId,
-          })),
-        )
+          }))
+        })
       }
 
       return company
@@ -106,22 +111,22 @@ export const companyResolvers = {
       const userId = requireAuth(context)
 
       // Get user's company
-      const user = await context.db.query.users.findFirst({
-        where: eq(users.id, userId),
+      const user = await context.prisma.user.findUnique({
+        where: { id: userId },
+        select: { companyId: true }
       })
 
       if (!user?.companyId) {
         throw new Error("Company not found")
       }
 
-      const [updated] = await context.db
-        .update(companies)
-        .set({
+      const updated = await context.prisma.company.update({
+        where: { id: user.companyId },
+        data: {
           ...input,
           updatedAt: new Date(),
-        })
-        .where(eq(companies.id, user.companyId))
-        .returning()
+        }
+      })
 
       return updated
     },

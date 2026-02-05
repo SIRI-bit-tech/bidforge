@@ -22,6 +22,11 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
     const [error, setError] = useState<string | null>(null)
     const isAuthenticated = useStore(state => state.isAuthenticated)
 
+    // Retry mechanism constants and state
+    const MAX_INIT_RETRIES = 5
+    const BASE_DELAY = 1000 // 1 second base delay
+    const [retryCount, setRetryCount] = useState(0)
+
     useEffect(() => {
         let mounted = true
         let realtime: Ably.Realtime | null = null
@@ -88,13 +93,24 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
 
                 handleStateChange()
 
+                // Reset retry count on successful initialization
+                if (mounted) {
+                    setRetryCount(0)
+                }
+
             } catch (err: any) {
                 console.error("Failed to initialize Ably Chat:", err)
                 if (mounted) {
                     setError(err.message || "Failed to initialize chat")
-                    // Retry only if it's not an auth error
-                    if (isAuthenticated) {
-                        setTimeout(initializeChat, 5000)
+                    
+                    // Bounded retry with exponential backoff
+                    if (isAuthenticated && retryCount < MAX_INIT_RETRIES) {
+                        const delay = Math.min(BASE_DELAY * Math.pow(2, retryCount), 30000) // Cap at 30 seconds
+                        setRetryCount(prev => prev + 1)
+                        setTimeout(initializeChat, delay)
+                    } else if (retryCount >= MAX_INIT_RETRIES) {
+                        console.error(`Ably initialization failed after ${MAX_INIT_RETRIES} retries`)
+                        setError(`Failed to initialize chat after ${MAX_INIT_RETRIES} attempts`)
                     }
                 }
             }
@@ -111,6 +127,8 @@ export function AblyProvider({ children }: { children: React.ReactNode }) {
             setRealtimeClient(null)
             setChatClient(null)
             setIsConnected(false)
+            // Reset retry count on cleanup
+            setRetryCount(0)
         }
     }, [isAuthenticated])
 

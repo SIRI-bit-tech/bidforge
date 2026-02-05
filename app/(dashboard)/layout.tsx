@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex">
         {/* Desktop Sidebar */}
         <Sidebar />
-        
+
         {/* Mobile Menu Button */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
@@ -70,9 +70,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SheetContent>
         </Sheet>
 
-        <main className="flex-1 overflow-x-hidden">
+        <main className="flex-1 overflow-x-hidden lg:ml-64">
           {/* Mobile: Full width with minimal padding, Desktop: Constrained with more padding */}
-          <div className="w-full px-4 py-4 lg:mx-auto lg:max-w-7xl lg:px-8 lg:py-8 lg:pl-8 pl-4 lg:pl-16">
+          <div className="w-full px-4 py-4 lg:mx-auto lg:max-w-7xl lg:px-8 lg:py-8">
             {children}
           </div>
         </main>

@@ -122,8 +122,10 @@ export async function POST(request: NextRequest) {
 
     // Async broadcast
     try {
-      broadcastNotification(project.createdById, result.notification)
-    } catch (e) { }
+      await broadcastNotification(project.createdById, result.notification)
+    } catch (e) {
+      console.error('Failed to broadcast notification:', e)
+    }
 
     return NextResponse.json({
       success: true,

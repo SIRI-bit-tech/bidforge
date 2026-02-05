@@ -43,9 +43,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Apply additional status filter if specified
+    // Apply additional status filter if specified, but respect role-enforced restrictions
     if (status && ['DRAFT', 'PUBLISHED', 'CLOSED', 'AWARDED'].includes(status)) {
-      where.status = status as any
+      // Only apply status filter if no role-enforced status exists, or if role permits overriding
+      if (!where.status || payload.role === 'CONTRACTOR') {
+        where.status = status as any
+      }
     }
 
     // Get projects with their trades using Prisma

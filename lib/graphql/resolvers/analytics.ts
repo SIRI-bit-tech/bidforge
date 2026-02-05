@@ -1,6 +1,4 @@
 import { type GraphQLContext, requireAuth } from "../context"
-import { projects, bids } from "@/lib/db/schema"
-import { eq, and, count, avg } from "drizzle-orm"
 
 export const analyticsResolvers = {
   Query: {
@@ -11,57 +9,64 @@ export const analyticsResolvers = {
 
       if (userRole === "CONTRACTOR") {
         // Contractor analytics
-        const [totalProjects] = await context.db
-          .select({ count: count() })
-          .from(projects)
-          .where(eq(projects.createdById, userId))
+        const totalProjects = await context.prisma.project.count({
+          where: { createdById: userId }
+        })
 
-        const [activeProjects] = await context.db
-          .select({ count: count() })
-          .from(projects)
-          .where(and(eq(projects.createdById, userId), eq(projects.status, "PUBLISHED")))
+        const activeProjects = await context.prisma.project.count({
+          where: { 
+            createdById: userId, 
+            status: "PUBLISHED" 
+          }
+        })
 
-        const [bidStats] = await context.db
-          .select({
-            total: count(),
-            average: avg(bids.totalAmount),
-          })
-          .from(bids)
-          .innerJoin(projects, eq(projects.id, bids.projectId))
-          .where(eq(projects.createdById, userId))
+        const bidStats = await context.prisma.bid.aggregate({
+          where: {
+            project: {
+              createdById: userId
+            }
+          },
+          _count: true,
+          _avg: {
+            totalAmount: true
+          }
+        })
 
         return {
-          totalProjects: totalProjects?.count || 0,
-          activeProjects: activeProjects?.count || 0,
-          totalBids: bidStats?.total || 0,
-          averageBidAmount: bidStats?.average || "0",
+          totalProjects: totalProjects || 0,
+          activeProjects: activeProjects || 0,
+          totalBids: bidStats._count || 0,
+          averageBidAmount: bidStats._avg.totalAmount?.toString() || "0",
           winRate: null,
           responseRate: null,
         }
       } else {
         // Subcontractor analytics
-        const [totalBids] = await context.db
-          .select({ count: count() })
-          .from(bids)
-          .where(eq(bids.subcontractorId, userId))
+        const totalBids = await context.prisma.bid.count({
+          where: { subcontractorId: userId }
+        })
 
-        const [awardedBids] = await context.db
-          .select({ count: count() })
-          .from(bids)
-          .where(and(eq(bids.subcontractorId, userId), eq(bids.status, "AWARDED")))
+        const awardedBids = await context.prisma.bid.count({
+          where: { 
+            subcontractorId: userId, 
+            status: "AWARDED" 
+          }
+        })
 
-        const [avgBid] = await context.db
-          .select({ average: avg(bids.totalAmount) })
-          .from(bids)
-          .where(eq(bids.subcontractorId, userId))
+        const avgBid = await context.prisma.bid.aggregate({
+          where: { subcontractorId: userId },
+          _avg: {
+            totalAmount: true
+          }
+        })
 
-        const winRate = totalBids?.count ? ((awardedBids?.count || 0) / totalBids.count) * 100 : 0
+        const winRate = totalBids ? (awardedBids / totalBids) * 100 : 0
 
         return {
           totalProjects: 0,
           activeProjects: 0,
-          totalBids: totalBids?.count || 0,
-          averageBidAmount: avgBid?.average || "0",
+          totalBids: totalBids || 0,
+          averageBidAmount: avgBid._avg.totalAmount?.toString() || "0",
           winRate,
           responseRate: null,
         }

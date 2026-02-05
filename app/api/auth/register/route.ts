@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 import { logError } from '@/lib/logger'
 import { handleAPIError } from '@/app/api/error-handler/route'
+import { isFounderEmail, calculateTrialEndDate } from '@/lib/utils/admin-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { email, password, name, role } = await request.json()
+    const { email, password, name, role, companyName, companyType } = await request.json()
 
     // Validate input
     if (!email || !password || !name || !role) {
@@ -86,11 +87,54 @@ export async function POST(request: NextRequest) {
     // Generate verification code
     const verificationData = generateVerificationData()
 
-    // Create user and verification code in a transaction
+    // Check if email is in waitlist for trial access
+    const waitlistEntry = await prisma.waitlist.findUnique({
+      where: { 
+        email: email.toLowerCase(),
+        isUsed: false 
+      }
+    })
+
+    // Check if user is founder
+    const isFounder = isFounderEmail(email)
+
+    // Determine trial and plan settings
+    let trialStartDate: Date | undefined
+    let trialEndDate: Date | undefined
+    let plan: "FREE" | "PRO" | "ENTERPRISE" = "FREE"
+    let subscriptionStatus: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INACTIVE" = "INACTIVE"
+
+    if (isFounder) {
+      // Founder gets permanent Pro access
+      plan = "PRO"
+      subscriptionStatus = "ACTIVE"
+    } else if (waitlistEntry) {
+      // Waitlist user gets trial access
+      trialStartDate = new Date()
+      trialEndDate = calculateTrialEndDate(trialStartDate)
+      plan = "PRO"
+      subscriptionStatus = "TRIALING"
+    }
+
+    // Create user, company, and verification code in a transaction
     let newUser: any
 
     try {
       newUser = await prisma.$transaction(async (tx: any) => {
+        // Create company first
+        const company = await tx.company.create({
+          data: {
+            name: companyName || `${name}'s Company`,
+            type: companyType || (role === 'CONTRACTOR' ? 'General Contractor' : 'Subcontractor'),
+            plan,
+            subscriptionStatus,
+            isFounder,
+            trialStartDate,
+            trialEndDate,
+          }
+        })
+
+        // Create user
         const createdUser = await tx.user.create({
           data: {
             email: email.toLowerCase(),
@@ -98,9 +142,11 @@ export async function POST(request: NextRequest) {
             passwordHash: hashedPassword,
             role: role as 'CONTRACTOR' | 'SUBCONTRACTOR',
             emailVerified: false,
+            companyId: company.id,
           }
         })
 
+        // Create verification code
         await tx.verificationCode.create({
           data: {
             userId: createdUser.id,
@@ -109,7 +155,18 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        return createdUser
+        // Mark waitlist entry as used if applicable
+        if (waitlistEntry) {
+          await tx.waitlist.update({
+            where: { id: waitlistEntry.id },
+            data: {
+              isUsed: true,
+              usedAt: new Date(),
+            }
+          })
+        }
+
+        return { ...createdUser, company }
       })
 
     } catch (dbError) {
@@ -151,6 +208,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Prepare response message based on access level
+    let welcomeMessage = 'Account created successfully!'
+    if (isFounder) {
+      welcomeMessage = 'Welcome, Founder! You have full Pro access.'
+    } else if (waitlistEntry) {
+      welcomeMessage = 'Welcome! You have been granted 60 days of Pro access.'
+    }
+
     // Return success
     return NextResponse.json({
       success: true,
@@ -160,8 +225,12 @@ export async function POST(request: NextRequest) {
         name: newUser.name,
         role: newUser.role,
         emailVerified: newUser.emailVerified,
+        companyId: newUser.company.id,
       },
       needsVerification: true,
+      message: welcomeMessage,
+      hasTrialAccess: !!waitlistEntry,
+      isFounder,
     }, { status: 201 })
 
   } catch (error) {

@@ -80,13 +80,32 @@ export default function SubcontractorsPage() {
     return searchSubcontractors(searchQuery, selectedTrades)
   }, [searchQuery, selectedTrades, searchSubcontractors, allSubcontractors])
 
-  // Get unique trades from all companies
+  // Get unique trades from all companies and also load all trades from database
   const availableTrades = useMemo(() => {
     const trades = new Set<string>()
+    
+    // Add trades from loaded companies
     companies.forEach(company => {
       company.trades.forEach(trade => trades.add(trade))
     })
-    return Array.from(trades)
+    
+    // Add all standard trades that are available during onboarding
+    const standardTrades = [
+      "ELECTRICAL",
+      "PLUMBING", 
+      "HVAC",
+      "CONCRETE",
+      "FRAMING",
+      "ROOFING",
+      "DRYWALL",
+      "FLOORING",
+      "PAINTING",
+      "LANDSCAPING"
+    ]
+    
+    standardTrades.forEach(trade => trades.add(trade))
+    
+    return Array.from(trades).sort()
   }, [companies])
 
   const toggleTrade = (trade: string) => {
@@ -192,28 +211,36 @@ export default function SubcontractorsPage() {
     const company = profile?.company
 
     return (
-      <Card className="hover:shadow-md transition-shadow">
+      <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-sm bg-card h-full flex flex-col">
         <CardHeader className="pb-4">
           <div className="flex items-start gap-4">
-            <Avatar className="h-12 w-12">
+            <Avatar className="h-16 w-16 border-2 border-muted flex-shrink-0">
               <AvatarImage src={company?.logo} />
-              <AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground font-semibold text-lg">
                 {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1">
-              <CardTitle className="text-lg">{user.name}</CardTitle>
-              <CardDescription className="text-sm">
-                {company?.name || "Independent Contractor"}
-                {company?.verified && (
-                  <span className="inline-flex items-center gap-1 ml-2 text-blue-600" title="Verified Pro">
-                    <BadgeCheck className="h-4 w-4 fill-blue-100" />
-                    <span className="text-xs font-medium">Verified</span>
-                  </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <CardTitle className="text-xl font-semibold text-foreground">{user.name}</CardTitle>
+                {/* Verification badge for Pro users */}
+                {(user.isFounder || 
+                  company?.plan === "PRO" || 
+                  company?.plan === "ENTERPRISE" ||
+                  (company?.trialEndDate && new Date(company.trialEndDate) > new Date())) && (
+                  <img 
+                    src="/verified-badge.png" 
+                    alt="Verified Pro Member" 
+                    className="h-6 w-6 flex-shrink-0" 
+                    title="Verified Pro Member" 
+                  />
                 )}
+              </div>
+              <CardDescription className="text-base text-muted-foreground mb-3">
+                {company?.name || "Independent Contractor"}
               </CardDescription>
               {company?.type && (
-                <Badge variant="secondary" className="mt-1">
+                <Badge variant="secondary" className="text-sm bg-accent/10 text-accent border-accent/20">
                   {company.type}
                 </Badge>
               )}
@@ -221,57 +248,60 @@ export default function SubcontractorsPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5 pt-0 flex-1 flex flex-col">
           {company?.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               {company.description}
             </p>
           )}
 
-          {/* Location */}
-          {company?.address && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              <span>{company.address}</span>
-            </div>
-          )}
-
-          {/* Contact */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {company?.phone && (
-              <div className="flex items-center gap-1">
-                <Phone className="h-4 w-4" />
-                <span>{company.phone}</span>
+          {/* Contact Information */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Location */}
+            {company?.address && (
+              <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4 text-muted-foreground/70 flex-shrink-0 mt-0.5" />
+                <span className="flex-1">{company.address}</span>
               </div>
             )}
-            {company?.website && (
-              <div className="flex items-center gap-1">
-                <Globe className="h-4 w-4" />
-                <a
-                  href={company.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  Website
-                </a>
+
+            {/* Phone */}
+            {company?.phone && (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <Phone className="h-4 w-4 text-muted-foreground/70 flex-shrink-0" />
+                <span>{company.phone}</span>
               </div>
             )}
           </div>
 
+          {/* Website */}
+          {company?.website && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Globe className="h-4 w-4 text-muted-foreground/70 flex-shrink-0" />
+              <a
+                href={company.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:text-accent-hover hover:underline transition-colors"
+              >
+                {company.website}
+              </a>
+            </div>
+          )}
+
           {/* Trades */}
           {company?.trades && company.trades.length > 0 && (
-            <div>
-              <Label className="text-xs font-medium text-muted-foreground">SPECIALTIES</Label>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {company.trades.slice(0, 3).map((trade) => (
-                  <Badge key={trade} variant="outline" className="text-xs">
+            <div className="bg-muted/50 rounded-lg p-4 flex-1">
+              <Label className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 block">Specialties</Label>
+              <div className="flex flex-wrap gap-2">
+                {company.trades.slice(0, 4).map((trade) => (
+                  <Badge key={trade} variant="outline" className="text-sm bg-card border-border text-foreground hover:bg-muted/50">
                     {trade}
                   </Badge>
                 ))}
-                {company.trades.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{company.trades.length - 3} more
+                {company.trades.length > 4 && (
+                  <Badge variant="outline" className="text-sm bg-card border-border text-muted-foreground">
+                    +{company.trades.length - 4} more
                   </Badge>
                 )}
               </div>
@@ -280,24 +310,24 @@ export default function SubcontractorsPage() {
 
           {/* Certifications */}
           {company?.certifications && company.certifications.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Award className="h-4 w-4" />
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Award className="h-5 w-5 text-success flex-shrink-0" />
               <span>{company.certifications.length} certification{company.certifications.length !== 1 ? 's' : ''}</span>
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-3 pt-4 border-t border-border mt-auto">
             <Button
               variant="outline"
-              size="sm"
-              className="flex-1"
+              size="default"
+              className="flex-1 border-border text-foreground hover:bg-muted"
               onClick={() => handleViewProfile(user)}
             >
               View Profile
             </Button>
             <Button
-              size="sm"
-              className="flex-1"
+              size="default"
+              className="flex-1 bg-accent hover:bg-accent-hover text-accent-foreground"
               onClick={() => handleInviteToProject(user)}
               disabled={userProjects.length === 0}
             >
@@ -357,20 +387,24 @@ export default function SubcontractorsPage() {
             placeholder="Search by name, company, or description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 border-border focus:border-accent focus:ring-accent"
           />
         </div>
 
         {/* Trade Filters */}
         {availableTrades.length > 0 && (
-          <div>
-            <Label className="text-sm font-medium mb-2 block">Filter by Trade</Label>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <Label className="text-sm font-semibold text-foreground mb-3 block">Filter by Trade</Label>
             <div className="flex flex-wrap gap-2">
               {availableTrades.map((trade) => (
                 <Button
                   key={trade}
                   variant={selectedTrades.includes(trade) ? "default" : "outline"}
                   size="sm"
+                  className={selectedTrades.includes(trade) 
+                    ? "bg-accent hover:bg-accent-hover text-accent-foreground border-accent" 
+                    : "border-border text-foreground hover:bg-muted hover:border-border"
+                  }
                   onClick={() => toggleTrade(trade)}
                 >
                   {trade}
@@ -390,7 +424,7 @@ export default function SubcontractorsPage() {
 
       {/* Subcontractor Grid */}
       {filteredSubcontractors.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 auto-rows-fr">
           {filteredSubcontractors.map((subcontractor) => (
             <SubcontractorCard key={subcontractor.id} user={subcontractor} />
           ))}
@@ -430,7 +464,21 @@ export default function SubcontractorsPage() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <div className="text-xl font-bold">{selectedProfile?.user.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold">{selectedProfile?.user.name}</span>
+                  {/* Verification badge for Pro users */}
+                  {(selectedProfile?.user.isFounder || 
+                    selectedProfile?.company?.plan === "PRO" || 
+                    selectedProfile?.company?.plan === "ENTERPRISE" ||
+                    (selectedProfile?.company?.trialEndDate && new Date(selectedProfile.company.trialEndDate) > new Date())) && (
+                    <img 
+                      src="/verified-badge.png" 
+                      alt="Verified Pro Member" 
+                      className="h-5 w-5" 
+                      title="Verified Pro Member" 
+                    />
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground">
                   {selectedProfile?.company?.name || "Independent Contractor"}
                 </div>

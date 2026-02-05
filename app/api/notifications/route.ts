@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, notifications } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
@@ -51,9 +50,8 @@ export async function POST(request: NextRequest) {
     // (In a real system, you might want to verify the target userId exists in the users table)
 
     // Create notification
-    const [newNotification] = await db
-      .insert(notifications)
-      .values({
+    const newNotification = await prisma.notification.create({
+      data: {
         userId,
         type,
         title,
@@ -61,8 +59,8 @@ export async function POST(request: NextRequest) {
         link: link || null,
         read: false,
         createdAt: new Date(),
-      })
-      .returning()
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -104,11 +102,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get notifications for the authenticated user
-    const userNotifications = await db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, payload.userId))
-      .orderBy(notifications.createdAt)
+    const userNotifications = await prisma.notification.findMany({
+      where: { userId: payload.userId },
+      orderBy: { createdAt: 'desc' }
+    })
 
     return NextResponse.json({
       success: true,

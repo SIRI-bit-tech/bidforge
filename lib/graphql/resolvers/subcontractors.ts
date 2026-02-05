@@ -1,6 +1,4 @@
-import { db } from "@/lib/db"
-import { companies, certifications, insurance } from "@/lib/db/schema"
-import { eq, like, and } from "drizzle-orm"
+import prisma from "@/lib/prisma"
 import { cache } from "@/lib/cache/redis"
 
 // Subcontractor resolver for directory and profile queries
@@ -15,19 +13,18 @@ export const subcontractorResolvers = {
       const cached = await cache.get(cacheKey)
       if (cached) return cached
 
-      let whereConditions = [eq(companies.type, "SUBCONTRACTOR")]
+      const where: any = { type: "SUBCONTRACTOR" }
 
       // Apply filters
       if (location) {
-        whereConditions.push(like(companies.address, `%${location}%`))
+        where.address = { contains: location, mode: 'insensitive' }
       }
 
-      const results = await db
-        .select()
-        .from(companies)
-        .where(and(...whereConditions))
-        .limit(limit)
-        .offset(offset)
+      const results = await prisma.company.findMany({
+        where,
+        take: limit,
+        skip: offset,
+      })
 
       // Cache for 5 minutes
       await cache.set(cacheKey, results, 300)
@@ -42,7 +39,7 @@ export const subcontractorResolvers = {
       if (cached) return cached
 
       // Use DataLoader to batch query
-      const company = await context.loaders.companyLoader.load(id)
+      const company = await context.loaders.company.load(id)
 
       if (!company || company.type !== "SUBCONTRACTOR") {
         throw new Error("Subcontractor not found")
@@ -58,12 +55,16 @@ export const subcontractorResolvers = {
   Subcontractor: {
     // Resolve certifications for subcontractor
     certifications: async (parent: any, _: any, context: any) => {
-      return await db.select().from(certifications).where(eq(certifications.companyId, parent.id))
+      return await prisma.certification.findMany({
+        where: { companyId: parent.id }
+      })
     },
 
     // Resolve insurance documents
     insurance: async (parent: any, _: any, context: any) => {
-      return await db.select().from(insurance).where(eq(insurance.companyId, parent.id))
+      return await prisma.insurance.findMany({
+        where: { companyId: parent.id }
+      })
     },
 
     // Resolve past projects

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logError } from '@/lib/logger'
-import { db, invitations, projects, users, notifications } from '@/lib/db'
-import { eq, and, inArray } from 'drizzle-orm'
+import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import { broadcastNotification } from '@/lib/socket/server'
 
@@ -39,11 +38,15 @@ export async function POST(request: NextRequest) {
 
     // Authorization check - verify caller is authorized to invite subcontractors to the project
     // (i.e., is the project owner)
-    const [project] = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        createdById: true,
+        status: true,
+        title: true
+      }
+    })
 
     if (!project) {
       return NextResponse.json(
@@ -77,15 +80,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify that all provided IDs are valid subcontractors
-    const validSubcontractors = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.role, 'SUBCONTRACTOR'),
-          inArray(users.id, subcontractorIds)
-        )
-      )
+    const validSubcontractors = await prisma.user.findMany({
+      where: {
+        role: 'SUBCONTRACTOR',
+        id: { in: subcontractorIds }
+      },
+      select: { id: true }
+    })
 
     // Extract valid subcontractor IDs from the database results
     const validSubcontractorIds = validSubcontractors.map(sub => sub.id)
@@ -98,10 +99,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for existing invitations to avoid duplicates
-    const existingInvitations = await db
-      .select()
-      .from(invitations)
-      .where(eq(invitations.projectId, projectId))
+    const existingInvitations = await prisma.invitation.findMany({
+      where: { projectId },
+      select: { subcontractorId: true }
+    })
 
     const existingSubcontractorIds = existingInvitations.map(inv => inv.subcontractorId)
     const newSubcontractorIds = validSubcontractorIds.filter(
@@ -116,35 +117,34 @@ export async function POST(request: NextRequest) {
     }
 
     // Create invitations
-    const newInvitations = await db
-      .insert(invitations)
-      .values(
-        newSubcontractorIds.map(subcontractorId => ({
-          projectId,
-          subcontractorId,
-          status: 'PENDING' as const,
-        }))
-      )
-      .returning()
+    const newInvitations = await prisma.invitation.createMany({
+      data: newSubcontractorIds.map(subcontractorId => ({
+        projectId,
+        subcontractorId,
+        status: 'PENDING' as const,
+      }))
+    })
 
     // User successfully sent invitations for project
 
     // Create notifications for invited subcontractors
     for (const subcontractorId of newSubcontractorIds) {
       try {
-        const [notification] = await db.insert(notifications).values({
-          userId: subcontractorId,
-          type: 'INVITATION',
-          title: 'New Project Invitation',
-          message: `You've been invited to bid on "${project.title}"`,
-          link: `/opportunities`,
-          read: false,
-          createdAt: new Date(),
-        }).returning()
+        const notification = await prisma.notification.create({
+          data: {
+            userId: subcontractorId,
+            type: 'INVITATION',
+            title: 'New Project Invitation',
+            message: `You've been invited to bid on "${project.title}"`,
+            link: `/opportunities`,
+            read: false,
+            createdAt: new Date(),
+          }
+        })
 
         // Broadcast notification via WebSocket for real-time updates
         try {
-          broadcastNotification(subcontractorId, notification)
+          await broadcastNotification(subcontractorId, notification)
         } catch (broadcastError) {
           // Log broadcast error but don't fail the invitation
           logError('Notification broadcast error', broadcastError, {
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
       errorType: 'invitations_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
       { error: 'Failed to send invitations' },
       { status: 500 }
@@ -207,18 +207,15 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
     const projectId = searchParams.get('projectId')
 
-    let whereConditions = []
-
     // Authorization: Users can only view invitations they're involved with
     if (payload.role === 'CONTRACTOR') {
       // Contractors can view invitations for their own projects
       if (projectId) {
         // Verify the contractor owns this project
-        const [project] = await db
-          .select({ createdById: projects.createdById })
-          .from(projects)
-          .where(eq(projects.id, projectId))
-          .limit(1)
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { createdById: true }
+        })
 
         if (!project || project.createdById !== payload.userId) {
           return NextResponse.json(
@@ -226,35 +223,44 @@ export async function GET(request: NextRequest) {
             { status: 403 }
           )
         }
-        whereConditions.push(eq(invitations.projectId, projectId))
-      } else {
-        // If no specific project, show invitations for all their projects
-        const userProjects = await db
-          .select({ id: projects.id })
-          .from(projects)
-          .where(eq(projects.createdById, payload.userId))
 
-        if (userProjects.length === 0) {
-          return NextResponse.json({
-            success: true,
-            invitations: []
-          })
-        }
+        const invitations = await prisma.invitation.findMany({
+          where: { projectId }
+        })
 
-        // This would need to be implemented with an IN clause for multiple projects
-        // For now, we'll return empty if no specific project is requested
         return NextResponse.json({
           success: true,
-          invitations: []
+          invitations
+        })
+      } else {
+        // If no specific project, show invitations for all their projects
+        const invitations = await prisma.invitation.findMany({
+          where: {
+            project: {
+              createdById: payload.userId
+            }
+          }
+        })
+
+        return NextResponse.json({
+          success: true,
+          invitations
         })
       }
     } else if (payload.role === 'SUBCONTRACTOR') {
       // Subcontractors can only view their own invitations
-      whereConditions.push(eq(invitations.subcontractorId, payload.userId))
-      
+      const where: any = { subcontractorId: payload.userId }
+
       if (projectId) {
-        whereConditions.push(eq(invitations.projectId, projectId))
+        where.projectId = projectId
       }
+
+      const invitations = await prisma.invitation.findMany({ where })
+
+      return NextResponse.json({
+        success: true,
+        invitations
+      })
     } else {
       return NextResponse.json(
         { error: 'Access denied. Invalid user role.' },
@@ -262,24 +268,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const result = whereConditions.length > 0 
-      ? await db.select().from(invitations).where(and(...whereConditions))
-      : []
-
-    return NextResponse.json({
-      success: true,
-      invitations: result
-    })
-
   } catch (error) {
     logError('invitations endpoint error', error, {
       endpoint: '/api/invitations',
       errorType: 'invitations_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: 'Failed to fetch invitations'  },
+      { error: 'Failed to fetch invitations' },
       { status: 500 }
     )
   }

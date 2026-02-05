@@ -3,18 +3,14 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@/lib/store"
-import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { MessageFileUpload, AttachmentDisplay } from "@/components/message-file-upload"
-import { Send, MessageSquare, Search, Clock, CheckCheck, ArrowLeft } from "lucide-react"
+import { MessageSquare, Search } from "lucide-react"
 import { ChatRoom } from "@/components/chat-room"
-import { Message, Project, User, MessageAttachment } from "@/lib/types"
+import { Message, Project, User } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
 
 interface Conversation {
@@ -34,14 +30,11 @@ export default function MessagesPage() {
     messages,
     projects,
     users,
-    sendMessage,
     markMessageAsRead,
     getMessagesByUser,
-    loadUsers,
+    loadAllUsers,
     loadProjects
   } = useStore()
-
-  const { toast } = useToast()
 
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -53,9 +46,10 @@ export default function MessagesPage() {
     const loadData = async () => {
       if (currentUser) {
         try {
+          // Load users and projects first, then messages
+          // This ensures we have the necessary data for conversation grouping
+          await Promise.all([loadAllUsers(), loadProjects()])
           await getMessagesByUser(currentUser.id)
-          await loadUsers()
-          await loadProjects()
         } catch (error) {
           console.error('Failed to load messages:', error)
         } finally {
@@ -65,7 +59,7 @@ export default function MessagesPage() {
     }
 
     loadData()
-  }, [currentUser, getMessagesByUser, loadUsers, loadProjects])
+  }, [currentUser, getMessagesByUser, loadAllUsers, loadProjects])
 
   // Group messages into conversations by project
   const conversations = useMemo(() => {
@@ -289,136 +283,137 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="fixed top-16 left-0 right-0 bottom-0 lg:relative lg:top-auto lg:left-auto lg:right-auto lg:bottom-auto lg:h-auto flex flex-col lg:container lg:mx-auto lg:px-4 lg:py-8">
-      {/* Header - Only show on desktop or when conversations list is visible on mobile */}
-      <div className={`mb-4 lg:mb-8 px-4 py-4 lg:px-0 lg:py-0 ${!showConversationsList ? 'hidden lg:block' : ''}`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">Messages</h1>
-            <p className="text-sm lg:text-base text-muted-foreground">
-              Communicate with {currentUser.role === "CONTRACTOR" ? "subcontractors" : "contractors"} about your projects
-            </p>
+    <div className="fixed top-16 left-0 lg:left-64 right-0 bottom-0 flex overflow-hidden">
+      {/* Messages List Column - Fixed, with internal scrolling */}
+      <div className={`w-full lg:w-[400px] flex-shrink-0 border-r border-border bg-card flex flex-col ${!showConversationsList ? 'hidden lg:flex' : ''}`}>
+        {/* Messages Header - Fixed */}
+        <div className="flex-shrink-0 px-6 py-4 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">Messages</h2>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (currentUser?.role === 'CONTRACTOR') {
+                  router.push('/subcontractors')
+                } else {
+                  router.push('/opportunities')
+                }
+              }}
+            >
+              New Chat
+            </Button>
           </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              variant="default"
+              size="sm"
+              className="rounded-full bg-primary text-primary-foreground"
+            >
+              General{conversations.reduce((total, conv) => total + conv.unreadCount, 0) > 0 && ` ${conversations.reduce((total, conv) => total + conv.unreadCount, 0)}`}
+            </Button>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        {/* Conversations List - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          {filteredConversations.length > 0 ? (
+            <div>
+              {filteredConversations.map((conversation) => {
+                const isSelected = `${conversation.projectId}::${conversation.otherUser.id}` === selectedConversation
+
+                return (
+                  <div
+                    key={`${conversation.projectId}::${conversation.otherUser.id}`}
+                    className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors border-b border-border ${isSelected ? 'bg-muted' : ''
+                      }`}
+                    onClick={() => handleConversationSelect(`${conversation.projectId}::${conversation.otherUser.id}`)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback>
+                            {conversation.otherUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {isSelected && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-card rounded-full" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-semibold text-sm truncate">
+                            {conversation.otherUser.name}
+                          </p>
+                          {conversation.lastMessage && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(conversation.lastMessage.sentAt), { addSuffix: false })}
+                            </span>
+                          )}
+                        </div>
+                        {conversation.lastMessage && (
+                          <p className="text-xs text-muted-foreground truncate mb-1">
+                            {conversation.lastMessage.text}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {conversation.project.title}
+                          </p>
+                          {conversation.unreadCount > 0 && (
+                            <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                              {conversation.unreadCount}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground">
+              <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No conversations found</p>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 lg:gap-6 h-full lg:h-[calc(100vh-200px)] overflow-hidden">
-        {/* Conversations List - Show/hide based on mobile state */}
-        <Card className={`lg:col-span-1 h-full flex flex-col ${!showConversationsList ? 'hidden lg:flex' : ''} border-0 lg:border rounded-none lg:rounded-lg`}>
-          <CardHeader className="pb-4 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Conversations</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  // For contractors, go to subcontractors page
-                  // For subcontractors, show available projects/contractors
-                  if (currentUser?.role === 'CONTRACTOR') {
-                    router.push('/subcontractors')
-                  } else {
-                    router.push('/opportunities')
-                  }
-                }}
-              >
-                New Chat
-              </Button>
+      {/* Chat Area - Fixed layout with internal scrolling */}
+      <div className={`flex-1 flex flex-col ${showConversationsList ? 'hidden lg:flex' : ''} bg-background overflow-hidden`}>
+        {selectedConv ? (
+          <ChatRoom
+            projectId={selectedConv.projectId}
+            recipientId={selectedConv.otherUser.id}
+            recipientName={selectedConv.otherUser.name}
+            existingMessages={selectedConv.messages}
+            onBack={handleBackToConversations}
+            className="h-full"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-muted-foreground">
+              <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <h3 className="text-lg font-medium mb-2">Select a conversation</h3>
+              <p>Choose a conversation from the list to start messaging</p>
             </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full">
-              {filteredConversations.length > 0 ? (
-                <div className="space-y-1">
-                  {filteredConversations.map((conversation) => {
-                    const isSelected = `${conversation.projectId}::${conversation.otherUser.id}` === selectedConversation
-
-                    return (
-                      <div
-                        key={`${conversation.projectId}::${conversation.otherUser.id}`}
-                        className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${isSelected ? 'bg-muted border-r-2 border-primary' : ''
-                          }`}
-                        onClick={() => handleConversationSelect(`${conversation.projectId}::${conversation.otherUser.id}`)}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Avatar className="h-10 w-10">
-                            <AvatarFallback>
-                              {conversation.otherUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <p className="font-medium text-sm truncate">
-                                {conversation.otherUser.name}
-                              </p>
-                              {conversation.unreadCount > 0 && (
-                                <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                                  {conversation.unreadCount}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate mb-1">
-                              {conversation.project.title}
-                            </p>
-                            {conversation.lastMessage && (
-                              <div className="flex items-center justify-between">
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {conversation.lastMessage.text}
-                                </p>
-                                <div className="flex items-center gap-1 ml-2">
-                                  {conversation.lastMessage.senderId === currentUser.id && (
-                                    <CheckCheck className="h-3 w-3 text-muted-foreground" />
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {conversation.lastMessage.sentAt ? formatDistanceToNow(new Date(conversation.lastMessage.sentAt), { addSuffix: true }) : 'Unknown time'}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="p-8 text-center text-muted-foreground">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No conversations found</p>
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        {/* Chat Area - Show/hide based on mobile state */}
-        <div className={`lg:col-span-2 h-full flex flex-col ${showConversationsList ? 'hidden lg:flex' : ''} bg-background lg:bg-card overflow-hidden`}>
-          {selectedConv ? (
-            <ChatRoom
-              projectId={selectedConv.projectId}
-              recipientId={selectedConv.otherUser.id}
-              recipientName={selectedConv.otherUser.name}
-              onBack={handleBackToConversations}
-              className="h-full border-0 lg:border rounded-none lg:rounded-lg"
-            />
-          ) : (
-            <Card className="flex items-center justify-center h-full border-0 lg:border rounded-none lg:rounded-lg">
-              <div className="text-center text-muted-foreground">
-                <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <h3 className="text-lg font-medium mb-2">Select a conversation</h3>
-                <p>Choose a conversation from the list to start messaging</p>
-              </div>
-            </Card>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

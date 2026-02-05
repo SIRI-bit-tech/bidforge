@@ -1,18 +1,12 @@
 import { betterAuth } from "better-auth"
-import { db } from "@/lib/db"
-import { users, verificationCodes } from "@/lib/db/schema"
+import { prismaAdapter } from "better-auth/adapters/prisma"
+import prisma from "@/lib/prisma"
 
 // Better Auth configuration for BidForge
 export const auth = betterAuth({
-  database: {
-    provider: "postgres",
-    db,
-    schema: {
-      user: users,
-      // Note: Better Auth will create its own session and account tables
-      verification: verificationCodes,
-    },
-  },
+  database: prismaAdapter(prisma, {
+    provider: "postgresql"
+  }),
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
@@ -50,7 +44,7 @@ export const auth = betterAuth({
 // Email verification function
 async function sendVerificationEmail(email: string, url: string) {
   // Import here to avoid circular dependency
-  const { sendEmail, emailTemplates } = await import("@/lib/utils/email")
+  const { sendEmail } = await import("@/lib/utils/email")
   
   await sendEmail({
     to: email,

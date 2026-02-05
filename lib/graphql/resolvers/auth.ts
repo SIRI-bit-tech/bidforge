@@ -1,8 +1,6 @@
 import type { GraphQLContext } from "../context"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import { users } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
 import { getJWTSecret } from "@/lib/utils/jwt"
 
 export const authResolvers = {
@@ -13,8 +11,8 @@ export const authResolvers = {
       context: GraphQLContext,
     ) {
       // Check if user already exists
-      const existingUser = await context.db.query.users.findFirst({
-        where: eq(users.email, input.email),
+      const existingUser = await context.prisma.user.findUnique({
+        where: { email: input.email }
       })
 
       if (existingUser) {
@@ -25,15 +23,14 @@ export const authResolvers = {
       const passwordHash = await bcrypt.hash(input.password, 10)
 
       // Create user
-      const [newUser] = await context.db
-        .insert(users)
-        .values({
+      const newUser = await context.prisma.user.create({
+        data: {
           email: input.email,
           name: input.name,
           passwordHash,
           role: input.role,
-        })
-        .returning()
+        }
+      })
 
       // Generate JWT token
       const token = jwt.sign({ userId: newUser.id, role: newUser.role }, getJWTSecret(), {
@@ -48,8 +45,8 @@ export const authResolvers = {
 
     async login(_: unknown, { input }: { input: { email: string; password: string } }, context: GraphQLContext) {
       // Find user
-      const user = await context.db.query.users.findFirst({
-        where: eq(users.email, input.email),
+      const user = await context.prisma.user.findUnique({
+        where: { email: input.email }
       })
 
       if (!user) {
@@ -81,13 +78,13 @@ export const authResolvers = {
         return null
       }
 
-      const user = await context.db.query.users.findFirst({
-        where: eq(users.id, context.userId),
-        with: {
+      const user = await context.prisma.user.findUnique({
+        where: { id: context.userId },
+        include: {
           company: {
-            with: {
+            include: {
               trades: {
-                with: {
+                include: {
                   trade: true,
                 },
               },

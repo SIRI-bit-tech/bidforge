@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getTradeLabel } from "@/lib/utils/format"
-import type { TradeCategory } from "@/lib/types"
+import type { TradeCategory, User } from "@/lib/types"
 
 const TRADES: TradeCategory[] = [
   "ELECTRICAL",
@@ -53,24 +53,53 @@ export default function OnboardingPage() {
     }))
   }
 
-  const handleSubmit = () => {
-    const company = createCompany({
-      name: formData.companyName,
-      type: formData.companyType,
-      address: formData.address,
-      phone: formData.phone,
-      website: formData.website,
-      description: formData.description,
-      trades: formData.trades,
-    })
+  const handleSubmit = async () => {
+    try {
+      // Create company via API
+      const response = await fetch('/api/companies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.companyName,
+          type: formData.companyType,
+          address: formData.address,
+          phone: formData.phone,
+          website: formData.website,
+          description: formData.description,
+          trades: formData.trades,
+        }),
+      })
 
-    // Link company to user
-    const updatedUsers = useStore
-      .getState()
-      .users.map((u) => (u.id === currentUser.id ? { ...u, companyId: company.id } : u))
-    useStore.setState({ users: updatedUsers, currentUser: { ...currentUser, companyId: company.id } })
+      const data = await response.json()
 
-    router.push("/pricing?onboarding=true")
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create company')
+      }
+
+      // Reload current user data from the auth endpoint
+      const userResponse = await fetch('/api/auth/me')
+      if (userResponse.ok) {
+        const userData = await userResponse.json()
+        const updatedUser: User = {
+          ...userData.user,
+          createdAt: new Date(userData.user.createdAt),
+          updatedAt: new Date(userData.user.updatedAt),
+          isFounder: userData.user.isFounder || false,
+          company: userData.user.company ? {
+            ...userData.user.company,
+            trialEndDate: userData.user.company.trialEndDate ? new Date(userData.user.company.trialEndDate) : null
+          } : undefined,
+        }
+        useStore.setState({ currentUser: updatedUser })
+      }
+
+      router.push("/pricing?onboarding=true")
+    } catch (error) {
+      console.error('Failed to create company:', error)
+      // Handle error - you might want to show a toast or error message
+    }
   }
 
   return (

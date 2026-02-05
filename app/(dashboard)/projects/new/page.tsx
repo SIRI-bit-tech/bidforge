@@ -37,7 +37,8 @@ export default function NewProjectPage() {
     title: "",
     description: "",
     location: "",
-    budget: "",
+    budgetMin: "",
+    budgetMax: "",
     startDate: "",
     endDate: "",
     deadline: "",
@@ -68,8 +69,8 @@ export default function NewProjectPage() {
           title: formData.title,
           description: formData.description,
           location: formData.location,
-          budgetMin: formData.budget,
-          budgetMax: formData.budget,
+          budgetMin: formData.budgetMin,
+          budgetMax: formData.budgetMax,
           startDate: formData.startDate,
           endDate: formData.endDate,
           deadline: formData.deadline,
@@ -110,7 +111,8 @@ export default function NewProjectPage() {
     formData.title &&
     formData.description &&
     formData.location &&
-    formData.budget &&
+    formData.budgetMin &&
+    formData.budgetMax &&
     formData.startDate &&
     formData.endDate &&
     formData.deadline &&
@@ -152,25 +154,37 @@ export default function NewProjectPage() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="location">Location *</Label>
+            <Input
+              id="location"
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              placeholder="City, State"
+              required
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Location *</Label>
+              <Label htmlFor="budgetMin">Minimum Budget (USD) *</Label>
               <Input
-                id="location"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="City, State"
+                id="budgetMin"
+                type="number"
+                value={formData.budgetMin}
+                onChange={(e) => setFormData({ ...formData, budgetMin: e.target.value })}
+                placeholder="3000000"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="budget">Budget (USD) *</Label>
+              <Label htmlFor="budgetMax">Maximum Budget (USD) *</Label>
               <Input
-                id="budget"
+                id="budgetMax"
                 type="number"
-                value={formData.budget}
-                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                value={formData.budgetMax}
+                onChange={(e) => setFormData({ ...formData, budgetMax: e.target.value })}
                 placeholder="5000000"
                 required
               />

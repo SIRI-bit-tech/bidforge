@@ -18,27 +18,59 @@ export const metadata: Metadata = {
   description:
     "Connect general contractors with qualified subcontractors. Streamline RFPs, compare bids in real-time, and award contracts with confidence.",
   generator: "v0.app",
+  manifest: "/manifest.json",
   icons: {
     icon: [
       {
-        url: "/favicon-32x32.svg",
+        url: "/favicon-32x32.png",
         sizes: "32x32",
-        type: "image/svg+xml",
+        type: "image/png",
       },
       {
-        url: "/favicon-16x16.svg",
+        url: "/favicon-16x16.png",
         sizes: "16x16",
-        type: "image/svg+xml",
+        type: "image/png",
       },
       {
-        url: "/favicon.svg",
-        type: "image/svg+xml",
+        url: "/favicon-96x96.png",
+        sizes: "96x96",
+        type: "image/png",
+      },
+      {
+        url: "/favicon.ico",
+        type: "image/x-icon",
       },
     ],
-    apple: {
-      url: "/apple-touch-icon.png",
-      sizes: "180x180"
-    },
+    apple: [
+      {
+        url: "/apple-icon-180x180.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+      {
+        url: "/apple-icon-152x152.png",
+        sizes: "152x152",
+        type: "image/png",
+      },
+      {
+        url: "/apple-icon-144x144.png",
+        sizes: "144x144",
+        type: "image/png",
+      },
+      {
+        url: "/apple-icon-120x120.png",
+        sizes: "120x120",
+        type: "image/png",
+      },
+    ],
+    other: [
+      {
+        rel: "android-chrome",
+        url: "/android-icon-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+    ],
   },
 }
 

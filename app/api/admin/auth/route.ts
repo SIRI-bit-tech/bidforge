@@ -3,18 +3,11 @@ import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { AdminLoginRequest, AdminLoginResponse } from "@/lib/types"
-
-const JWT_SECRET = process.env.JWT_SECRET!
-const ADMIN_SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
-
-/**
- * Admin login endpoint
- * Authenticates admin users and creates secure sessions
- */
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from "@/lib/utils/rate-limit"
 import { cache } from "@/lib/cache/redis"
 
-// ... imports
+const JWT_SECRET = process.env.JWT_SECRET!
+const ADMIN_SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
  * Admin login endpoint
@@ -45,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find admin user
-    const user = await prisma.user.findFirst({
+    const user = await (prisma as any).user.findFirst({
       where: {
         email,
         role: "ADMIN",
@@ -172,7 +165,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify session exists and is not expired
-    const session = await prisma.adminSession.findFirst({
+    const session = await (prisma as any).adminSession.findFirst({
       where: {
         token,
         expiresAt: {

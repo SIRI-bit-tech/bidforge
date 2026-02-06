@@ -708,7 +708,11 @@ export const useStore = create<AppState>((set, get) => ({
           // Update the awarded bid and decline others for this project
           bids: state.bids.map((b) => {
             if (b.id === id) return { ...b, status: "AWARDED", updatedAt: new Date() }
-            if (b.projectId === awardedBid.projectId && b.status !== "AWARDED") {
+
+            // Only decline bids for the same project that are in transitionable states
+            // This matches the server-side logic and avoids declining withdrawn/already declined bids
+            const declinableStatuses = ["SUBMITTED", "UNDER_REVIEW", "DRAFT"]
+            if (b.projectId === awardedBid.projectId && declinableStatuses.includes(b.status)) {
               return { ...b, status: "DECLINED", updatedAt: new Date() }
             }
             return b

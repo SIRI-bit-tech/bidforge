@@ -124,24 +124,36 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validate allowed updates
-    const allowedFields = ["name", "email", "emailVerified"] // Removed "role" to handle it separately
-    const filteredUpdates: any = {}
+    // Fetch the target user first to verify existence
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true }
+    })
 
-    // First fetch the current user state if role is being updated
-    let currentUserState = null
-    if (Object.keys(updates).includes("role")) {
-      currentUserState = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { role: true }
-      })
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      )
     }
+
+    // Validate allowed updates
+    const allowedRoles = ["CONTRACTOR", "SUBCONTRACTOR", "ADMIN"]
+    const allowedFields = ["name", "email", "emailVerified"]
+    const filteredUpdates: any = {}
 
     for (const [key, value] of Object.entries(updates)) {
       if (allowedFields.includes(key)) {
         filteredUpdates[key] = value
       } else if (key === "role") {
         // Special handling for role updates
+        if (!allowedRoles.includes(value as string)) {
+          return NextResponse.json(
+            { success: false, error: `Invalid role value: ${value}. Allowed roles: ${allowedRoles.join(", ")}` },
+            { status: 400 }
+          )
+        }
+
         if (value === "ADMIN") {
           return NextResponse.json(
             { success: false, error: "Cannot promote users to ADMIN role via this endpoint" },
@@ -149,15 +161,7 @@ export async function PUT(request: NextRequest) {
           )
         }
 
-        // Audit log for role changes
-        if (currentUserState && currentUserState.role !== value) {
-          logInfo("Admin changed user role", {
-            adminId: adminUser.id,
-            targetUserId: userId,
-            oldRole: currentUserState.role,
-            newRole: value,
-            timestamp: new Date().toISOString()
-          })
+        if (targetUser.role !== value) {
           filteredUpdates[key] = value
         }
       }
@@ -187,6 +191,17 @@ export async function PUT(request: NextRequest) {
         },
       },
     })
+
+    // Log role change audit entry AFTER successful update
+    if (filteredUpdates.role && targetUser.role !== filteredUpdates.role) {
+      logInfo("Admin changed user role", {
+        adminId: adminUser.id,
+        targetUserId: userId,
+        oldRole: targetUser.role,
+        newRole: updatedUser.role,
+        timestamp: new Date().toISOString()
+      })
+    }
 
     return NextResponse.json({
       success: true,

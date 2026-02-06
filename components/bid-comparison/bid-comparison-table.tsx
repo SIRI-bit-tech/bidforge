@@ -18,18 +18,20 @@ interface BidComparisonTableProps {
   onViewBid: (bidId: string) => void
   onAwardBid?: (bidId: string) => void
   canAward?: boolean
+  isAwarding?: boolean
 }
 
 type SortField = 'amount' | 'company' | 'submittedAt' | 'status'
 type SortDirection = 'asc' | 'desc'
 
-export function BidComparisonTable({ 
-  bids, 
-  companies, 
-  users, 
-  onViewBid, 
-  onAwardBid, 
-  canAward = false 
+export function BidComparisonTable({
+  bids,
+  companies,
+  users,
+  onViewBid,
+  onAwardBid,
+  canAward = false,
+  isAwarding = false
 }: BidComparisonTableProps) {
   const [sortField, setSortField] = useState<SortField>('amount')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
@@ -149,7 +151,7 @@ export function BidComparisonTable({
               {sortedBids.map((bid) => {
                 const { user, company } = getCompanyInfo(bid)
                 const isLowest = Number(bid.totalAmount) === lowestBid
-                
+
                 return (
                   <TableRow key={bid.id} className={cn(isLowest && "bg-green-50 dark:bg-green-950/20")}>
                     <TableCell>
@@ -205,10 +207,14 @@ export function BidComparisonTable({
                             variant="outline"
                             size="sm"
                             onClick={() => onAwardBid(bid.id)}
-                            className="text-green-600 border-green-600 hover:bg-green-50"
+                            disabled={isAwarding}
+                            className={cn(
+                              "text-green-600 border-green-600 hover:bg-green-50",
+                              isAwarding && "opacity-50 cursor-not-allowed"
+                            )}
                           >
                             <Award className="h-4 w-4 mr-1" />
-                            Award
+                            {isAwarding ? "Awarding..." : "Award"}
                           </Button>
                         )}
                       </div>

@@ -21,6 +21,7 @@ interface BidComparisonViewProps {
   onViewBid: (bidId: string) => void
   onAwardBid?: (bidId: string) => void
   canAward?: boolean
+  isAwarding?: boolean
 }
 
 export function BidComparisonView({
@@ -30,7 +31,8 @@ export function BidComparisonView({
   users,
   onViewBid,
   onAwardBid,
-  canAward = false
+  canAward = false,
+  isAwarding = false
 }: BidComparisonViewProps) {
   const router = useRouter()
   const { userPlan, limits } = usePlanLimits()
@@ -86,7 +88,7 @@ export function BidComparisonView({
               </div>
               <h3 className="text-lg font-bold mb-2">Advanced Bid Comparison</h3>
               <p className="text-sm text-muted-foreground mb-4 max-w-md">
-                Compare bids side-by-side with advanced filtering, sorting, and real-time updates. 
+                Compare bids side-by-side with advanced filtering, sorting, and real-time updates.
                 Perfect for making informed decisions quickly.
               </p>
               <div className="flex items-center gap-2 mb-4">
@@ -140,9 +142,9 @@ export function BidComparisonView({
       <BidComparisonStats bids={submittedBids} />
 
       {/* Filters */}
-      <BidFilters 
-        bids={submittedBids} 
-        onFiltersChange={setFilteredBids} 
+      <BidFilters
+        bids={submittedBids}
+        onFiltersChange={setFilteredBids}
       />
 
       {/* Comparison Table */}
@@ -153,6 +155,7 @@ export function BidComparisonView({
         onViewBid={onViewBid}
         onAwardBid={onAwardBid}
         canAward={canAward}
+        isAwarding={isAwarding}
       />
     </div>
   )

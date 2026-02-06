@@ -27,7 +27,7 @@ export async function POST(
         }
 
         // Verify bid exists and belongs to a project owned by the user
-        const bid = await prisma.bid.findUnique({
+        const bid = await (prisma as any).bid.findUnique({
             where: { id },
             include: {
                 project: true,
@@ -51,27 +51,26 @@ export async function POST(
             )
         }
 
-        if (bid.project.status !== 'PUBLISHED') {
-            return NextResponse.json(
-                { error: 'Project is not in a state to award bids' },
-                { status: 400 }
-            )
-        }
-
         // Transaction to update bid, project, decline others, and notify
-        const result = await prisma.$transaction(async (tx) => {
-            // 1. Update the awarded bid
-            const awardedBid = await tx.bid.update({
-                where: { id },
+        // This prevents race conditions where multiple awards could be triggered simultaneously
+        const result = await (prisma as any).$transaction(async (tx: any) => {
+            // 1. Update project status atomically - this will fail if already awarded or not owned by user
+            // This prevents TOCTOU (Time of Check to Time of Use) vulnerabilities
+            const updatedProject = await tx.project.update({
+                where: {
+                    id: bid.projectId,
+                    status: 'PUBLISHED',
+                    createdById: payload.userId
+                },
                 data: {
                     status: 'AWARDED',
                     updatedAt: new Date()
                 }
             })
 
-            // 2. Update project status
-            const updatedProject = await tx.project.update({
-                where: { id: bid.projectId },
+            // 2. Update the awarded bid
+            const awardedBid = await tx.bid.update({
+                where: { id },
                 data: {
                     status: 'AWARDED',
                     updatedAt: new Date()
@@ -98,7 +97,7 @@ export async function POST(
                     type: 'BID_AWARDED',
                     title: 'Congratulations! Bid Awarded',
                     message: `Your bid for "${bid.project.title}" has been awarded!`,
-                    link: `/my-bids/${bid.id}`, // Assuming this route exists or similar
+                    link: `/my-bids/${bid.id}`,
                     read: false,
                     createdAt: new Date(),
                 }
@@ -109,7 +108,7 @@ export async function POST(
                 where: {
                     projectId: bid.projectId,
                     id: { not: id },
-                    status: 'DECLINED' // They were just updated to declined
+                    status: 'DECLINED'
                 },
                 select: { subcontractorId: true }
             })
@@ -117,11 +116,10 @@ export async function POST(
             // Create notifications for others
             const otherNotifications = []
             for (const otherBid of otherBids) {
-                // Simple deduplication if a subcontractor submitted multiple bids (unlikely but possible)
                 otherNotifications.push(await tx.notification.create({
                     data: {
                         userId: otherBid.subcontractorId,
-                        type: 'BID_AWARDED', // Using same type for now or maybe 'BID_DECLINED'
+                        type: 'BID_AWARDED',
                         title: 'Bid Status Update',
                         message: `Another contractor was selected for "${bid.project.title}".`,
                         read: false,

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       '# TYPE bidforge_database_connections gauge',
       `bidforge_database_connections{state="total"} ${dbStats.available && dbStats.total_connections !== null ? dbStats.total_connections : -1}`, // Use -1 to indicate unavailable
       `bidforge_database_connections{state="active"} ${dbStats.available && dbStats.active_connections !== null ? dbStats.active_connections : -1}`,
-      `bidforge_database_connections{state="idle"} ${dbStats.available && dbStats.total_connections !== null ? dbStats.idle_connections : -1}`,
+      `bidforge_database_connections{state="idle"} ${dbStats.available && dbStats.idle_connections !== null ? dbStats.idle_connections : -1}`,
       '',
       '# HELP bidforge_websocket_connections WebSocket connection count',
       '# TYPE bidforge_websocket_connections gauge',

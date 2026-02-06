@@ -69,10 +69,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       })
 
       // Refresh data to ensure consistency with backend
-      await Promise.all([
+      const [, bids] = await Promise.all([
         loadProjects(),
         loadBids(id)
       ])
+      setProjectBids(bids)
 
       router.refresh()
       setShowBidComparison(false)
@@ -272,6 +273,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     onViewBid={handleViewBid}
                     onAwardBid={handleAwardBid}
                     canAward={isProjectOwner}
+                    isAwarding={isAwarding}
                   />
                 ) : (
                   <div className="space-y-4">

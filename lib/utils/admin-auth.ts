@@ -35,7 +35,7 @@ export async function verifyAdminToken(request: NextRequest): Promise<AdminUser 
     }
 
     // Check if session exists and is not expired
-    const session = await (prisma as any).adminSession.findFirst({
+    const session = await prisma.adminSession.findFirst({
       where: {
         token,
         expiresAt: {

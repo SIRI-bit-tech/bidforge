@@ -152,11 +152,36 @@ export const projectResolvers = {
         throw new Error("Project not found or access denied")
       }
 
+      // Validate and sanitize input
+      const allowedFields = [
+        "title",
+        "description",
+        "location",
+        "city",
+        "state",
+        "budgetMin",
+        "budgetMax",
+        "startDate",
+        "endDate",
+        "deadline"
+      ]
+
+      const filteredUpdates: any = {}
+      for (const key of Object.keys(input)) {
+        if (allowedFields.includes(key)) {
+          filteredUpdates[key] = input[key]
+        }
+      }
+
+      if (Object.keys(filteredUpdates).length === 0) {
+        throw new Error("No valid update fields provided")
+      }
+
       // Update project
       const updated = await context.prisma.project.update({
         where: { id },
         data: {
-          ...input,
+          ...filteredUpdates,
           updatedAt: new Date(),
         },
       })

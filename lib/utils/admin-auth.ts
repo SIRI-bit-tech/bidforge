@@ -3,7 +3,11 @@ import prisma from "@/lib/prisma"
 import jwt from "jsonwebtoken"
 import { AdminUser } from "@/lib/types"
 
-const JWT_SECRET = process.env.JWT_SECRET!
+const JWT_SECRET = process.env.JWT_SECRET as string
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("Missing required environment variable JWT_SECRET")
+}
 
 /**
  * Verify admin authentication token
@@ -12,11 +16,17 @@ const JWT_SECRET = process.env.JWT_SECRET!
 export async function verifyAdminToken(request: NextRequest): Promise<AdminUser | null> {
   try {
     const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
+    const cookieToken = request.cookies.get("admin_token")?.value
+
+    let token = ""
+
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.substring(7)
+    } else if (cookieToken) {
+      token = cookieToken
+    } else {
       return null
     }
-
-    const token = authHeader.substring(7)
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET) as any
@@ -25,7 +35,8 @@ export async function verifyAdminToken(request: NextRequest): Promise<AdminUser 
     }
 
     // Check if session exists and is not expired
-    const session = await prisma.adminSession.findFirst({
+    // Check if session exists and is not expired
+    const session = await (prisma as any).adminSession.findFirst({
       where: {
         token,
         expiresAt: {
@@ -66,13 +77,18 @@ export async function verifyAdminToken(request: NextRequest): Promise<AdminUser 
 export function isFounderEmail(email: string): boolean {
   const founderEmail1 = process.env.FOUNDER_EMAIL
   const founderEmail2 = process.env.FOUNDER_EMAIL_2
-  
+
   const emailLower = email.toLowerCase()
-  
-  return (
-    (founderEmail1 && emailLower === founderEmail1.toLowerCase()) ||
-    (founderEmail2 && emailLower === founderEmail2.toLowerCase())
-  )
+
+  if (founderEmail1 && emailLower === founderEmail1.toLowerCase()) {
+    return true
+  }
+
+  if (founderEmail2 && emailLower === founderEmail2.toLowerCase()) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -109,10 +125,10 @@ export function isInTrialPeriod(company: { trialStartDate?: Date; trialEndDate?:
  */
 export function getTrialDaysRemaining(trialEndDate?: Date): number {
   if (!trialEndDate) return 0
-  
+
   const now = new Date()
   const diffTime = trialEndDate.getTime() - now.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  
+
   return Math.max(0, diffDays)
 }

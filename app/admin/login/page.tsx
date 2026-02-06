@@ -25,26 +25,17 @@ export default function AdminLoginPage() {
 
   // Check if already logged in
   useEffect(() => {
-    const token = localStorage.getItem("admin_token")
-    if (token) {
-      // Verify token is still valid
-      fetch("/api/admin/auth", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // Verify secure session cookie
+    fetch("/api/admin/auth")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          router.push("/admin")
+        }
       })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success) {
-            router.push("/admin")
-          } else {
-            localStorage.removeItem("admin_token")
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem("admin_token")
-        })
-    }
+      .catch(() => {
+        // Session invalid, stay on login page
+      })
   }, [router])
 
   /**
@@ -62,7 +53,7 @@ export default function AdminLoginPage() {
 
   /**
    * Handle form submission
-   * Authenticates admin and stores session token
+   * Authenticates admin and creates secure httpOnly session
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,11 +71,8 @@ export default function AdminLoginPage() {
 
       const data: AdminLoginResponse = await response.json()
 
-      if (data.success && data.token) {
-        // Store token in localStorage
-        localStorage.setItem("admin_token", data.token)
-        
-        // Redirect to admin dashboard
+      if (data.success) {
+        // Session cookie is set automatically by the server
         router.push("/admin")
       } else {
         setError(data.error || "Login failed")
@@ -109,7 +97,7 @@ export default function AdminLoginPage() {
             Sign in to access the admin dashboard
           </p>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (

@@ -72,7 +72,7 @@ interface AppState {
   updateBid: (id: string, data: Partial<Bid>) => Bid
   submitBid: (id: string) => Bid
   withdrawBid: (id: string) => Bid
-  awardBid: (id: string) => Bid
+  awardBid: (id: string) => Promise<Bid>
   getBid: (id: string) => Bid | undefined
   getBidsByProject: (projectId: string) => Bid[]
   getBidsBySubcontractor: (subcontractorId: string) => Bid[]
@@ -391,9 +391,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Combine both arrays and remove duplicates
         const contractors = contractorsData.users || []
         const subcontractors = subcontractorsData.users || []
-        
+
         allUsers = [...contractors, ...subcontractors]
-        
+
         // Remove duplicates based on user ID
         const userMap = new Map()
         allUsers.forEach(user => userMap.set(user.id, user))
@@ -684,43 +684,49 @@ export const useStore = create<AppState>((set, get) => ({
     return get().updateBid(id, { status: "WITHDRAWN" })
   },
 
-  awardBid: (id) => {
-    const bid = get().updateBid(id, { status: "AWARDED" })
-    const project = get().getProject(bid.projectId)
-
-    if (project) {
-      // Update project status
-      get().updateProject(project.id, { status: "AWARDED" })
-
-      // Notify winning bidder
-      get().createNotification({
-        userId: bid.subcontractorId,
-        type: "BID_AWARDED",
-        title: "Congratulations! Bid Awarded",
-        message: `Your bid for ${project.title} has been awarded!`,
-        read: false,
-        createdAt: new Date(),
-        link: `/my-bids/${bid.id}`,
+  awardBid: async (id) => {
+    try {
+      const response = await fetch(`/api/bids/${id}/award`, {
+        method: 'POST',
       })
 
-      // Decline other bids
-      const otherBids = get()
-        .getBidsByProject(project.id)
-        .filter((b) => b.id !== id)
-      otherBids.forEach((b) => {
-        get().updateBid(b.id, { status: "DECLINED" })
-        get().createNotification({
-          userId: b.subcontractorId,
-          type: "BID_AWARDED",
-          title: "Bid Not Selected",
-          message: `Thank you for your bid on ${project.title}. Another contractor was selected for this project.`,
-          read: false,
-          createdAt: new Date(),
-        })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to award bid')
+      }
+
+      const awardedBid = {
+        ...data.bid,
+        totalAmount: parseFloat(data.bid.totalAmount),
+        updatedAt: new Date(data.bid.updatedAt),
+      }
+
+      // Update local state
+      set((state) => {
+        return {
+          // Update the awarded bid and decline others for this project
+          bids: state.bids.map((b) => {
+            if (b.id === id) return { ...b, status: "AWARDED", updatedAt: new Date() }
+            if (b.projectId === awardedBid.projectId && b.status !== "AWARDED") {
+              return { ...b, status: "DECLINED", updatedAt: new Date() }
+            }
+            return b
+          }),
+          // Update project status
+          projects: state.projects.map(p =>
+            p.id === awardedBid.projectId
+              ? { ...p, status: "AWARDED", updatedAt: new Date() }
+              : p
+          )
+        }
       })
+
+      return awardedBid
+    } catch (error) {
+      const sanitizedError = sanitizeError(error)
+      throw new Error(sanitizedError.message)
     }
-
-    return bid
   },
 
   getBid: (id) => {

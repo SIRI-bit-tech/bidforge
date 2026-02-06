@@ -6,7 +6,12 @@ import { AdminLoginRequest, AdminLoginResponse } from "@/lib/types"
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from "@/lib/utils/rate-limit"
 import { cache } from "@/lib/cache/redis"
 
-const JWT_SECRET = process.env.JWT_SECRET!
+const JWT_SECRET = process.env.JWT_SECRET as string
+
+if (!JWT_SECRET) {
+  throw new Error("Missing required environment variable JWT_SECRET")
+}
+
 const ADMIN_SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find admin user
-    const user = await (prisma as any).user.findFirst({
+    const user = await prisma.user.findFirst({
       where: {
         email,
         role: "ADMIN",
@@ -165,7 +170,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify session exists and is not expired
-    const session = await (prisma as any).adminSession.findFirst({
+    const session = await prisma.adminSession.findFirst({
       where: {
         token,
         expiresAt: {

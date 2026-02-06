@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import { broadcastNotification } from '@/lib/socket/server'
+import { Prisma } from '@prisma/client'
 
 export async function POST(
     request: NextRequest,
@@ -27,7 +28,7 @@ export async function POST(
         }
 
         // Verify bid exists and belongs to a project owned by the user
-        const bid = await (prisma as any).bid.findUnique({
+        const bid = await prisma.bid.findUnique({
             where: { id },
             include: {
                 project: true,
@@ -53,7 +54,7 @@ export async function POST(
 
         // Transaction to update bid, project, decline others, and notify
         // This prevents race conditions where multiple awards could be triggered simultaneously
-        const result = await (prisma as any).$transaction(async (tx: any) => {
+        const result = await prisma.$transaction(async (tx) => {
             // 1. Update project status atomically - this will fail if already awarded or not owned by user
             // This prevents TOCTOU (Time of Check to Time of Use) vulnerabilities
             const updatedProject = await tx.project.update({
@@ -148,7 +149,16 @@ export async function POST(
             project: result.updatedProject
         })
 
-    } catch (error) {
+    } catch (error: any) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2025') {
+                return NextResponse.json(
+                    { error: 'Project has already been awarded or is no longer available for awarding.' },
+                    { status: 409 }
+                )
+            }
+        }
+
         console.error('Bid award error:', error)
         return NextResponse.json(
             { error: 'Failed to award bid' },

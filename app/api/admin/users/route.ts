@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma"
 import { verifyAdminToken } from "@/lib/utils/admin-auth"
 import { AdminUser } from "@/lib/types"
 import { logInfo } from "@/lib/logger"
+import { Prisma } from "@prisma/client"
 
 /**
  * Get all users with admin view
@@ -214,6 +215,18 @@ export async function PUT(request: NextRequest) {
       },
     })
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Email already in use. Please choose a different email address."
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     console.error("Update user error:", error)
     return NextResponse.json(
       { success: false, error: "Internal server error" },

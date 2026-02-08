@@ -261,6 +261,7 @@ export interface TrialManagement {
 export interface AdminLoginRequest {
   email: string
   password: string
+  adminCode?: string
 }
 
 export interface AdminLoginResponse {

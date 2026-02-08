@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         return { ...createdUser, company }
       })
 
-    } catch (dbError) {
+    } catch (dbError: any) {
       // Log database errors with email notification
       logError('Database error during user registration', dbError, {
         endpoint: '/api/auth/register',
@@ -179,8 +179,21 @@ export async function POST(request: NextRequest) {
         severity: 'critical'
       })
 
+      // Provide more specific error messages
+      let errorMessage = 'Failed to create account. Please try again.'
+      
+      if (dbError.code === 'P2002') {
+        errorMessage = 'An account with this email already exists.'
+      } else if (dbError.code === 'P2003') {
+        errorMessage = 'Database constraint error. Please contact support.'
+      } else if (dbError.message?.includes('connect')) {
+        errorMessage = 'Database connection error. Please try again in a moment.'
+      } else if (dbError.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please try again.'
+      }
+
       return NextResponse.json(
-        { error: 'Failed to create account. Please try again.' },
+        { error: errorMessage },
         { status: 500 }
       )
     }
@@ -234,10 +247,29 @@ export async function POST(request: NextRequest) {
       isFounder,
     }, { status: 201 })
 
-  } catch (error) {
-    return handleAPIError(error as Error, request, {
+  } catch (error: any) {
+    // Log the full error for debugging
+    console.error('Registration error:', error)
+    logError('Registration system error', error, {
+      endpoint: '/api/auth/register',
       errorType: 'registration_system_error',
       severity: 'high'
     })
+
+    // Return user-friendly error message
+    let errorMessage = 'An unexpected error occurred. Please try again.'
+    
+    if (error.message?.includes('DATABASE_URL')) {
+      errorMessage = 'Database configuration error. Please contact support.'
+    } else if (error.message?.includes('connect')) {
+      errorMessage = 'Unable to connect to the database. Please try again later.'
+    } else if (error.message?.includes('Prisma')) {
+      errorMessage = 'Database error. Please try again or contact support.'
+    }
+
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    )
   }
 }

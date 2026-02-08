@@ -19,6 +19,7 @@ export default function AdminLoginPage() {
   const [formData, setFormData] = useState<AdminLoginRequest>({
     email: "",
     password: "",
+    adminCode: "",
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -128,6 +129,20 @@ export default function AdminLoginPage() {
                 type="password"
                 placeholder="Enter your password"
                 value={formData.password}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="adminCode">Admin Code</Label>
+              <Input
+                id="adminCode"
+                name="adminCode"
+                type="text"
+                placeholder="Enter admin code"
+                value={formData.adminCode}
                 onChange={handleChange}
                 required
                 disabled={loading}

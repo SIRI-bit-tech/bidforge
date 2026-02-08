@@ -33,12 +33,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body: AdminLoginRequest = await request.json()
-    const { email, password } = body
+    const { email, password, adminCode } = body
 
     if (!email || !password) {
       return NextResponse.json(
         { success: false, error: "Email and password are required" },
         { status: 400 }
+      )
+    }
+
+    // Verify admin code
+    const ADMIN_SECRET = process.env.ADMIN_SECRET
+    if (!ADMIN_SECRET) {
+      return NextResponse.json(
+        { success: false, error: "Admin system not configured" },
+        { status: 500 }
+      )
+    }
+
+    if (adminCode !== ADMIN_SECRET) {
+      return NextResponse.json(
+        { success: false, error: "Invalid admin code" },
+        { status: 401 }
       )
     }
 

@@ -20,7 +20,7 @@ const prismaClientSingleton = () => {
         // Use Accelerate extension
         return new PrismaClient({
             log: logLevel,
-        }).$extends(withAccelerate()) as any
+        }).$extends(withAccelerate())
     }
 
     // Use direct PostgreSQL connection with adapter
@@ -30,7 +30,7 @@ const prismaClientSingleton = () => {
     return new PrismaClient({
         log: logLevel,
         adapter,
-    }) as any
+    })
 }
 
 declare global {

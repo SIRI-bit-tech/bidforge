@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Insert Document and Update Storage in transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const newDocument = await tx.document.create({
         data: {
           projectId,

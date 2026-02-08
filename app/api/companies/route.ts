@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create company using Prisma transaction with increased timeout
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Create the company
       const company = await tx.company.create({
         data: {

@@ -54,7 +54,7 @@ export async function POST(
 
         // Transaction to update bid, project, decline others, and notify
         // This prevents race conditions where multiple awards could be triggered simultaneously
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // 1. Update project status atomically - this will fail if already awarded or not owned by user
             // This prevents TOCTOU (Time of Check to Time of Use) vulnerabilities
             const updatedProject = await tx.project.update({

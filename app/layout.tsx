@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+// import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { URQLProvider } from "@/lib/providers/urql-provider"
@@ -10,8 +10,16 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { AblyProvider } from "@/hooks/use-ably-chat"
 import { RealTimeManager } from "@/components/real-time-manager"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+// const _geist = Geist({ 
+//   subsets: ["latin"],
+//   display: "swap",
+//   fallback: ["system-ui", "arial"]
+// })
+// const _geistMono = Geist_Mono({ 
+//   subsets: ["latin"],
+//   display: "swap",
+//   fallback: ["monospace"]
+// })
 
 export const metadata: Metadata = {
   title: "BidForge - Construction Bid Management Platform",

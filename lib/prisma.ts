@@ -18,10 +18,9 @@ const prismaClientSingleton = () => {
     // Check if using Prisma Accelerate
     if (dbUrl.startsWith('prisma://') || dbUrl.startsWith('prisma+postgres://')) {
         // Use Accelerate extension
-        const client = new PrismaClient({
+        return new PrismaClient({
             log: logLevel,
-        })
-        return client.$extends(withAccelerate())
+        }).$extends(withAccelerate()) as any
     }
 
     // Use direct PostgreSQL connection with adapter
@@ -31,7 +30,7 @@ const prismaClientSingleton = () => {
     return new PrismaClient({
         log: logLevel,
         adapter,
-    })
+    }) as any
 }
 
 declare global {

@@ -71,17 +71,17 @@ export async function GET(request: NextRequest) {
     // Role-specific filter (for valid requests) - preserve existing where conditions
     if (role && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role)) {
       // Only apply role filter if caller has sufficient privileges or the role is in their allowed set
-      const canFilterByRole = payload.role === 'ADMIN' || 
+      const canFilterByRole = payload.role === 'ADMIN' ||
         (payload.role === 'CONTRACTOR' && role === 'SUBCONTRACTOR') ||
         (payload.role === 'SUBCONTRACTOR' && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role))
-      
+
       if (canFilterByRole) {
         where.role = role as any
       }
     }
 
-    // Get total count and users using Prisma
-    const [totalCount, users] = await prisma.$transaction([
+    // Get total count and users using Promise.all for parallel reads
+    const [totalCount, users] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     ])
 
     // Add isFounder field to users and format company trades
-    const usersWithFounderStatus = users.map(user => ({
+    const usersWithFounderStatus = users.map((user: any) => ({
       id: user.id,
       email: user.email,
       name: user.name,

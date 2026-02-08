@@ -1,13 +1,31 @@
 import { PrismaClient, Prisma } from "@prisma/client"
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
+import { withAccelerate } from "@prisma/extension-accelerate"
 
 const prismaClientSingleton = () => {
     const logLevel: Prisma.LogLevel[] = process.env.NODE_ENV === "development"
         ? ["query", "error", "warn"]
         : ["error"]
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+    const dbUrl = process.env.DATABASE_URL
+    
+    if (!dbUrl) {
+        console.error("DATABASE_URL environment variable is not set")
+        throw new Error("DATABASE_URL environment variable is required")
+    }
+
+    // Check if using Prisma Accelerate
+    if (dbUrl.startsWith('prisma://') || dbUrl.startsWith('prisma+postgres://')) {
+        // Use Accelerate extension
+        const client = new PrismaClient({
+            log: logLevel,
+        })
+        return client.$extends(withAccelerate())
+    }
+
+    // Use direct PostgreSQL connection with adapter
+    const pool = new Pool({ connectionString: dbUrl })
     const adapter = new PrismaPg(pool)
 
     return new PrismaClient({

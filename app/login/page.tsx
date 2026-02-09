@@ -115,7 +115,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
+      <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12 pt-16">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">Welcome back</h1>

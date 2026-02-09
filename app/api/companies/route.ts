@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        const existingTradeNames = existingTrades.map(t => t.name)
+        const existingTradeNames = existingTrades.map((t: any) => t.name)
         const missingTradeNames = normalizedTrades.filter((name: string) => !existingTradeNames.includes(name))
 
         // Create missing trades in batch
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
         // Create company-trade relationships in batch
         await tx.companyTrade.createMany({
-          data: allTrades.map(trade => ({
+          data: allTrades.map((trade: any) => ({
             companyId: company.id,
             tradeId: trade.id
           })),

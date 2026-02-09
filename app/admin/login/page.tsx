@@ -132,6 +132,7 @@ export default function AdminLoginPage() {
                 onChange={handleChange}
                 required
                 disabled={loading}
+                autoComplete="current-password"
               />
             </div>
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import prisma from "@/lib/prisma"
 import { verifyAdminToken } from "@/lib/utils/admin-auth"
 import { WaitlistRequest, WaitlistResponse, WaitlistEntry } from "@/lib/types"
+import { SupabaseWaitlistService } from "@/lib/services/supabase-service"
 
 /**
- * Get all waitlist entries
+ * Get all waitlist entries from Supabase
  * Returns paginated list of waitlist emails with usage status
  */
 export async function GET(request: NextRequest) {
@@ -24,38 +24,31 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || ""
     const filter = searchParams.get("filter") || "all" // all, used, unused
 
-    const skip = (page - 1) * limit
+    // Get waitlist entries from Supabase
+    let entries = await SupabaseWaitlistService.getRecentEntries(limit * 3) // Get more for filtering
 
-    // Build where clause
-    const where: any = {}
-    
+    // Apply search filter
     if (search) {
-      where.email = {
-        contains: search,
-        mode: "insensitive",
-      }
+      entries = entries.filter(entry =>
+        entry.email.toLowerCase().includes(search.toLowerCase())
+      )
     }
 
+    // Apply status filter
     if (filter === "used") {
-      where.isUsed = true
+      entries = entries.filter(entry => entry.status === "converted" || entry.converted_at)
     } else if (filter === "unused") {
-      where.isUsed = false
+      entries = entries.filter(entry => !entry.status && !entry.converted_at)
     }
 
-    // Get waitlist entries with pagination
-    const [entries, total] = await Promise.all([
-      prisma.waitlist.findMany({
-        where,
-        orderBy: { addedAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.waitlist.count({ where }),
-    ])
+    // Apply pagination
+    const startIndex = (page - 1) * limit
+    const paginatedEntries = entries.slice(startIndex, startIndex + limit)
+    const total = entries.length
 
     return NextResponse.json({
       success: true,
-      data: entries,
+      data: paginatedEntries,
       pagination: {
         page,
         limit,
@@ -73,7 +66,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Add email to waitlist
+ * Add email to waitlist (Supabase)
  * Creates a new waitlist entry for early access
  */
 export async function POST(request: NextRequest) {
@@ -97,24 +90,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email already exists
-    const existing = await prisma.waitlist.findUnique({
-      where: { email: email.toLowerCase() },
-    })
-
-    if (existing) {
-      return NextResponse.json(
-        { success: false, error: "Email already in waitlist" },
-        { status: 409 }
-      )
-    }
-
-    // Create waitlist entry
-    const entry = await prisma.waitlist.create({
-      data: {
-        email: email.toLowerCase(),
-        addedBy: adminUser.id,
-      },
+    // Add to Supabase waitlist
+    const entry = await SupabaseWaitlistService.addToWaitlist(email, {
+      addedBy: adminUser.id,
     })
 
     const response: WaitlistResponse = {
@@ -124,17 +102,27 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(response)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Add waitlist error:", error)
+    const errorMessage = error.message || "Internal server error"
+
+    // Handle duplicate email error
+    if (errorMessage.includes("duplicate") || errorMessage.includes("already exists")) {
+      return NextResponse.json(
+        { success: false, error: "Email already in waitlist" },
+        { status: 409 }
+      )
+    }
+
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: errorMessage },
       { status: 500 }
     )
   }
 }
 
 /**
- * Bulk add emails to waitlist
+ * Bulk add emails to waitlist (Supabase)
  * Accepts array of emails for batch processing
  */
 export async function PUT(request: NextRequest) {
@@ -170,39 +158,28 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Get existing emails to avoid duplicates
-    const existing = await prisma.waitlist.findMany({
-      where: {
-        email: {
-          in: validEmails,
-        },
-      },
-      select: { email: true },
-    })
+    // Add each email individually to Supabase
+    let addedCount = 0
+    let skippedCount = 0
+    const errors: string[] = []
 
-    const existingEmails = new Set(existing.map((e: { email: string }) => e.email))
-    const newEmails = validEmails.filter((email) => !existingEmails.has(email))
-
-    if (newEmails.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "All emails already in waitlist" },
-        { status: 409 }
-      )
+    for (const email of validEmails) {
+      try {
+        await SupabaseWaitlistService.addToWaitlist(email, {
+          addedBy: adminUser.id,
+        })
+        addedCount++
+      } catch (error: any) {
+        skippedCount++
+        errors.push(`${email}: ${error.message}`)
+      }
     }
-
-    // Bulk create waitlist entries
-    await prisma.waitlist.createMany({
-      data: newEmails.map((email) => ({
-        email,
-        addedBy: adminUser.id,
-      })),
-    })
 
     return NextResponse.json({
       success: true,
-      message: `Added ${newEmails.length} emails to waitlist`,
-      added: newEmails.length,
-      skipped: validEmails.length - newEmails.length,
+      message: `Added ${addedCount} emails to waitlist`,
+      added: addedCount,
+      skipped: skippedCount,
     })
   } catch (error) {
     console.error("Bulk add waitlist error:", error)

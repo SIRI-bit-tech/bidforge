@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { verifyAdminToken } from "@/lib/utils/admin-auth"
 import { AdminStats } from "@/lib/types"
+import { SupabaseWaitlistService } from "@/lib/services/supabase-service"
 
 /**
  * Get admin dashboard analytics
@@ -22,29 +23,24 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const thirtyOneDaysAgo = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000)
 
-    // Get all statistics in parallel
+    // Get local database statistics
     const [
       totalUsers,
       totalCompanies,
       totalProjects,
       totalBids,
       activeTrials,
-      waitlistCount,
-      recentSignups,
-      waitlistUsed,
-      recentProjects,
-      recentBids,
       planDistribution,
       userRoleDistribution,
+      userGrowthRaw,
+      revenueRaw,
     ] = await Promise.all([
-      // Total counts
       prisma.user.count(),
       prisma.company.count(),
       prisma.project.count(),
       prisma.bid.count(),
-
-      // Active trials
       prisma.company.count({
         where: {
           trialEndDate: {
@@ -52,72 +48,65 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-
-      // Waitlist stats
-      prisma.waitlist.count(),
-
-      // Recent signups (last 7 days)
-      prisma.user.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo,
-          },
-        },
-      }),
-
-      // Waitlist conversion
-      prisma.waitlist.count({
-        where: {
-          isUsed: true,
-        },
-      }),
-
-      // Recent activity
-      prisma.project.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo,
-          },
-        },
-      }),
-
-      prisma.bid.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo,
-          },
-        },
-      }),
-
-      // Plan distribution
       prisma.company.groupBy({
         by: ["plan"],
         _count: {
           plan: true,
         },
       }),
-
-      // User role distribution
       prisma.user.groupBy({
         by: ["role"],
         _count: {
           role: true,
         },
       }),
+      // Get daily user signups for last 30 days
+      prisma.$queryRaw<Array<{ date: Date; users: bigint }>>`
+        SELECT 
+          DATE(created_at) as date,
+          COUNT(*) as users
+        FROM users 
+        WHERE created_at >= ${thirtyOneDaysAgo.toISOString()}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+      `,
+      // Get revenue from all plan types
+      prisma.$queryRaw<Array<{ date: Date; upgrades: bigint }>>`
+        SELECT 
+          DATE(updated_at) as date,
+          COUNT(*) as upgrades
+        FROM companies 
+        WHERE plan IN ('FREE', 'PRO', 'ENTERPRISE') 
+        AND updated_at >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE(updated_at)
+        ORDER BY DATE(updated_at)
+      `,
     ])
 
-    // Calculate conversion rate
-    const conversionRate = waitlistCount > 0 ? (waitlistUsed / waitlistCount) * 100 : 0
+    // Convert BigInt to regular numbers
+    const userGrowthData = userGrowthRaw.map((item: any) => ({
+      date: item.date,
+      users: Number(item.users)
+    }))
+
+    const revenueData = revenueRaw.map((item: any) => ({
+      date: item.date,
+      upgrades: Number(item.upgrades)
+    }))
+
+    // Get waitlist stats from Supabase
+    const waitlistStats = await SupabaseWaitlistService.getWaitlistStats()
+    const { totalCount: waitlistTotal, convertedCount: waitlistUsed, conversionRate: waitlistConversionRate } = waitlistStats
 
     // Format plan distribution
     const planStats = planDistribution.reduce((acc: Record<string, number>, item: any) => {
-      acc[item.plan] = item._count.plan
+      acc[item.plan] = Number(item._count.plan)
       return acc
     }, {} as Record<string, number>)
 
     // Format role distribution
     const roleStats = userRoleDistribution.reduce((acc: Record<string, number>, item: any) => {
-      acc[item.role] = item._count.role
+      acc[item.role] = Number(item._count.role)
       return acc
     }, {} as Record<string, number>)
 
@@ -182,20 +171,33 @@ export async function GET(request: NextRequest) {
       totalProjects,
       totalBids,
       activeTrials,
-      waitlistCount,
-      recentSignups,
-      conversionRate: Math.round(conversionRate * 100) / 100,
+      waitlistCount: waitlistTotal,
+      recentSignups: userGrowthData.length,
+      conversionRate: Math.round(waitlistConversionRate * 100) / 100,
+    }
+
+    // Convert BigInt values to regular numbers before JSON serialization
+    const serializedStats = {
+      totalUsers: Number(totalUsers),
+      totalCompanies: Number(totalCompanies),
+      totalProjects: Number(totalProjects),
+      totalBids: Number(totalBids),
+      activeTrials: Number(activeTrials),
+      waitlistCount: Number(waitlistTotal),
+      recentSignups: userGrowthData.length,
+      conversionRate: Math.round(waitlistConversionRate * 100) / 100,
     }
 
     return NextResponse.json({
       success: true,
-      stats,
+      stats: serializedStats,
       details: {
+        userGrowthData: userGrowthData,
+        revenueData: revenueData,
         planDistribution: planStats,
         roleDistribution: roleStats,
         recentActivity: {
-          projects: recentProjects,
-          bids: recentBids,
+          projects: recentProjectsList,
         },
         recent: {
           users: recentUsers,

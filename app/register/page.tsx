@@ -126,6 +126,7 @@ export default function RegisterPage() {
                   value={formData.password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
                   required
+                  autoComplete="new-password"
                 />
                 {passwordErrors.length > 0 && (
                   <div className="text-xs text-muted-foreground space-y-1">
@@ -151,6 +152,7 @@ export default function RegisterPage() {
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   required
+                  autoComplete="new-password"
                 />
               </div>
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useStore } from '@/lib/store'
 
 interface AuthContextType {
@@ -25,10 +26,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
   const { restoreSession } = useStore()
+  const pathname = usePathname()
 
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Skip session restoration on admin pages
+        if (pathname?.startsWith('/admin')) {
+          setIsLoading(false)
+          setIsInitialized(true)
+          return
+        }
+        
         await restoreSession()
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -41,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     initializeAuth()
-  }, [restoreSession])
+  }, [restoreSession, pathname])
 
   return (
     <AuthContext.Provider value={{ isLoading, isInitialized }}>

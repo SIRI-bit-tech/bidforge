@@ -22,10 +22,13 @@ import {
 } from "lucide-react"
 import { AdminUser, WaitlistEntry } from "@/lib/types"
 import { formatDate } from "@/lib/utils/format"
+import { SupabaseWaitlistService } from "@/lib/services/supabase-service"
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Waitlist management page
- * Allows admin to add, view, and manage waitlist entries
+ * Connects to external Supabase waitlist database
+ * Allows admin to view and manage waitlist entries from external website
  */
 export default function AdminWaitlistPage() {
   const router = useRouter()
@@ -52,16 +55,12 @@ export default function AdminWaitlistPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   /**
-   * Load waitlist data
+   * Load waitlist data from API (which uses Supabase)
    */
   const loadWaitlist = async () => {
     try {
-      const token = localStorage.getItem("admin_token")
-      if (!token) {
-        router.push("/admin/login")
-        return
-      }
-
+      setLoading(true)
+      
       const params = new URLSearchParams({
         page: page.toString(),
         limit: "50",
@@ -70,14 +69,12 @@ export default function AdminWaitlistPage() {
       })
 
       const response = await fetch(`/api/admin/waitlist?${params}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: "GET",
+        credentials: "include",
       })
 
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem("admin_token")
           router.push("/admin/login")
           return
         }
@@ -92,6 +89,8 @@ export default function AdminWaitlistPage() {
     } catch (error) {
       console.error("Load waitlist error:", error)
       setMessage({ type: "error", text: "Failed to load waitlist" })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -100,20 +99,11 @@ export default function AdminWaitlistPage() {
    */
   const loadUser = async () => {
     try {
-      const token = localStorage.getItem("admin_token")
-      if (!token) {
-        router.push("/admin/login")
-        return
-      }
-
       const response = await fetch("/api/admin/auth", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: "GET",
       })
 
       if (!response.ok) {
-        localStorage.removeItem("admin_token")
         router.push("/admin/login")
         return
       }
@@ -142,7 +132,7 @@ export default function AdminWaitlistPage() {
   }, [user, page, search, filter])
 
   /**
-   * Add single email to waitlist
+   * Add single email to waitlist (API)
    */
   const handleAddEmail = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -152,13 +142,12 @@ export default function AdminWaitlistPage() {
     setMessage(null)
 
     try {
-      const token = localStorage.getItem("admin_token")
       const response = await fetch("/api/admin/waitlist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ email: newEmail.trim() }),
       })
 
@@ -180,7 +169,7 @@ export default function AdminWaitlistPage() {
   }
 
   /**
-   * Add multiple emails to waitlist
+   * Add multiple emails to waitlist (API)
    */
   const handleBulkAdd = async () => {
     if (!bulkEmails.trim()) return
@@ -194,13 +183,12 @@ export default function AdminWaitlistPage() {
         .map(email => email.trim())
         .filter(email => email)
 
-      const token = localStorage.getItem("admin_token")
       const response = await fetch("/api/admin/waitlist", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ emails }),
       })
 
@@ -226,21 +214,24 @@ export default function AdminWaitlistPage() {
   }
 
   /**
-   * Export waitlist to CSV
+   * Export waitlist to CSV (Supabase)
    */
   const handleExport = () => {
     const csv = [
-      "Email,Added At,Used At,Status",
-      ...waitlist.map(entry => 
-        `${entry.email},${formatDate(entry.addedAt)},${entry.usedAt ? formatDate(entry.usedAt) : ""},${entry.isUsed ? "Used" : "Unused"}`
-      )
+      "Email,Added At,Status,Converted At",
+      ...waitlist.map(entry => {
+        const addedAt = entry.created_at ? formatDate(entry.created_at) : formatDate(entry.addedAt)
+        const status = entry.status === "converted" || entry.converted_at ? "Used" : "Unused"
+        const convertedAt = entry.converted_at ? formatDate(entry.converted_at) : ""
+        return `${entry.email},${addedAt},${status},${convertedAt}`
+      })
     ].join("\n")
 
     const blob = new Blob([csv], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `waitlist-${new Date().toISOString().split("T")[0]}.csv`
+    a.download = `supabase-waitlist-${new Date().toISOString().split("T")[0]}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -395,14 +386,14 @@ export default function AdminWaitlistPage() {
           <CardContent>
             {waitlist.length > 0 ? (
               <div className="space-y-4">
-                {waitlist.map((entry) => (
+                {waitlist.map((entry, index) => (
                   <div
-                    key={entry.id}
+                    key={entry.id || `entry-${index}`}
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-full ${entry.isUsed ? "bg-green-100" : "bg-gray-100"}`}>
-                        {entry.isUsed ? (
+                      <div className={`p-2 rounded-full ${entry.status === "converted" || entry.converted_at ? "bg-green-100" : "bg-gray-100"}`}>
+                        {entry.status === "converted" || entry.converted_at ? (
                           <Check className="h-4 w-4 text-green-600" />
                         ) : (
                           <Mail className="h-4 w-4 text-gray-600" />
@@ -411,21 +402,21 @@ export default function AdminWaitlistPage() {
                       <div>
                         <p className="font-medium">{entry.email}</p>
                         <p className="text-sm text-muted-foreground">
-                          Added {formatDate(entry.addedAt)}
+                          Added {formatDate(entry.created_at || entry.addedAt)}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      {entry.usedAt && (
+                      {entry.converted_at && (
                         <div className="text-right">
-                          <p className="text-sm text-muted-foreground">Used</p>
+                          <p className="text-sm text-muted-foreground">Converted</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatDate(entry.usedAt)}
+                            {formatDate(entry.converted_at)}
                           </p>
                         </div>
                       )}
-                      <Badge variant={entry.isUsed ? "default" : "secondary"}>
-                        {entry.isUsed ? "Used" : "Unused"}
+                      <Badge variant={entry.status === "converted" || entry.converted_at ? "default" : "secondary"}>
+                        {entry.status === "converted" || entry.converted_at ? "Converted" : "Waiting"}
                       </Badge>
                     </div>
                   </div>

@@ -36,21 +36,12 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const token = localStorage.getItem("admin_token")
-        if (!token) {
-          router.push("/admin/login")
-          return
-        }
-
-        // Verify authentication and get user
+        // Verify authentication and get user (uses HTTP-only cookie)
         const authResponse = await fetch("/api/admin/auth", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          method: "GET",
         })
 
         if (!authResponse.ok) {
-          localStorage.removeItem("admin_token")
           router.push("/admin/login")
           return
         }
@@ -66,17 +57,21 @@ export default function AdminDashboardPage() {
 
         // Load dashboard analytics
         const analyticsResponse = await fetch("/api/admin/analytics", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          method: "GET",
         })
-
+        
         if (analyticsResponse.ok) {
           const analyticsData = await analyticsResponse.json()
           if (analyticsData.success) {
             setStats(analyticsData.stats)
             setRecentActivity(analyticsData.details)
+          } else {
+            console.error("Analytics API returned error:", analyticsData.error)
           }
+        } else {
+          console.error("Analytics API failed with status:", analyticsResponse.status)
+          const errorText = await analyticsResponse.text()
+          console.error("Error response:", errorText)
         }
       } catch (error) {
         console.error("Dashboard load error:", error)

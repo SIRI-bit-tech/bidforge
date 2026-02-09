@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { AblyProvider } from "@/hooks/use-ably-chat"
 import { RealTimeManager } from "@/components/real-time-manager"
+import { LayoutWrapper } from "@/components/layout-wrapper"
 
 // const _geist = Geist({ 
 //   subsets: ["latin"],
@@ -91,12 +92,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`font-sans antialiased`}>
         <ErrorBoundary>
-          <AuthProvider>
-            <AblyProvider>
-              <RealTimeManager />
-              <URQLProvider>{children}</URQLProvider>
-            </AblyProvider>
-          </AuthProvider>
+          <LayoutWrapper>
+            <URQLProvider>{children}</URQLProvider>
+          </LayoutWrapper>
           <Toaster />
           <Analytics />
         </ErrorBoundary>

@@ -22,8 +22,6 @@ import {
 } from "lucide-react"
 import { AdminUser, WaitlistEntry } from "@/lib/types"
 import { formatDate } from "@/lib/utils/format"
-import { SupabaseWaitlistService } from "@/lib/services/supabase-service"
-import { createClient } from '@supabase/supabase-js';
 
 /**
  * Waitlist management page

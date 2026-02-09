@@ -70,13 +70,13 @@ export async function GET(request: NextRequest) {
         GROUP BY DATE(created_at)
         ORDER BY DATE(created_at)
       `,
-      // Get revenue from all plan types
+      // Get revenue from actual plan upgrades (PRO/ENTERPRISE only)
       prisma.$queryRaw<Array<{ date: Date; upgrades: bigint }>>`
         SELECT 
           DATE(updated_at) as date,
           COUNT(*) as upgrades
         FROM companies 
-        WHERE plan IN ('FREE', 'PRO', 'ENTERPRISE') 
+        WHERE plan IN ('PRO', 'ENTERPRISE') 
         AND updated_at >= NOW() - INTERVAL '12 months'
         GROUP BY DATE(updated_at)
         ORDER BY DATE(updated_at)
@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
 
     const revenueData = revenueRaw.map((item: any) => ({
       date: item.date,
-      upgrades: Number(item.upgrades)
+      upgrades: Number(item.upgrades),
+      revenue: Number(item.upgrades) * 29 // Precomputed revenue on server
     }))
 
     // Get waitlist stats from Supabase
@@ -172,7 +173,7 @@ export async function GET(request: NextRequest) {
       totalBids,
       activeTrials,
       waitlistCount: waitlistTotal,
-      recentSignups: userGrowthData.length,
+      recentSignups: userGrowthData.reduce((sum, day) => sum + Number(day.users), 0),
       conversionRate: Math.round(waitlistConversionRate * 100) / 100,
     }
 
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
       totalBids: Number(totalBids),
       activeTrials: Number(activeTrials),
       waitlistCount: Number(waitlistTotal),
-      recentSignups: userGrowthData.length,
+      recentSignups: userGrowthData.reduce((sum, day) => sum + Number(day.users), 0),
       conversionRate: Math.round(waitlistConversionRate * 100) / 100,
     }
 

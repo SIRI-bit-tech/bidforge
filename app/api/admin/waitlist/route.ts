@@ -24,27 +24,16 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || ""
     const filter = searchParams.get("filter") || "all" // all, used, unused
 
-    // Get waitlist entries from Supabase
-    let entries = await SupabaseWaitlistService.getRecentEntries(limit * 3) // Get more for filtering
+    // Get waitlist entries with server-side filtering and pagination
+    const offset = (page - 1) * limit
+    const { entries, total } = await SupabaseWaitlistService.getEntriesWithFilters({
+      search,
+      filter,
+      limit,
+      offset
+    })
 
-    // Apply search filter
-    if (search) {
-      entries = entries.filter(entry =>
-        entry.email.toLowerCase().includes(search.toLowerCase())
-      )
-    }
-
-    // Apply status filter
-    if (filter === "used") {
-      entries = entries.filter(entry => entry.status === "converted" || entry.converted_at)
-    } else if (filter === "unused") {
-      entries = entries.filter(entry => !entry.status && !entry.converted_at)
-    }
-
-    // Apply pagination
-    const startIndex = (page - 1) * limit
-    const paginatedEntries = entries.slice(startIndex, startIndex + limit)
-    const total = entries.length
+    const paginatedEntries = entries
 
     return NextResponse.json({
       success: true,

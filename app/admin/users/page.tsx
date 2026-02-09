@@ -1,6 +1,25 @@
 "use client"
 
 import { useState, useEffect } from "react"
+
+/**
+ * Custom hook for debouncing values
+ */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
 import { useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,6 +51,9 @@ export default function AdminUsersPage() {
   // Filter states
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  
+  // Debounced search value
+  const debouncedSearch = useDebounce(search, 300)
   
   // Pagination
   const [page, setPage] = useState(1)
@@ -71,7 +93,7 @@ export default function AdminUsersPage() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: "50",
-        search,
+        search: debouncedSearch,
         role: roleFilter,
       })
 
@@ -103,7 +125,7 @@ export default function AdminUsersPage() {
     if (user) {
       loadUsers().finally(() => setLoading(false))
     }
-  }, [user, page, search, roleFilter])
+  }, [user, page, debouncedSearch, roleFilter])
 
   if (loading) {
     return (

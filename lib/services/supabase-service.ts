@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { WaitlistEntry } from '@/lib/types'
 
 // Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL
@@ -17,11 +18,11 @@ if (supabaseUrl && supabaseKey) {
   console.warn('Supabase environment variables not found. Waitlist features will be disabled.')
 }
 
-export interface WaitlistEntry {
+// Service-specific interface for Supabase data
+interface SupabaseWaitlistEntry {
   id: string
   email: string
   created_at: string
-  // Add any other fields your waitlist table has
   status?: string
   name?: string
   converted_at?: string
@@ -79,8 +80,7 @@ export class SupabaseWaitlistService {
       const { count, error } = await supabase
         .from('waitlist')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'converted') // Adjust field name as needed
-        .or('converted_at.not.is.null') // Alternative check
+        .or('status.eq.converted,converted_at.not.is.null') // OR condition for converted status
 
       if (error) {
         console.error('Supabase converted count error:', error)
@@ -97,7 +97,7 @@ export class SupabaseWaitlistService {
   /**
    * Get recent waitlist entries
    */
-  static async getRecentEntries(limit: number = 10): Promise<WaitlistEntry[]> {
+  static async getRecentEntries(limit: number = 10): Promise<SupabaseWaitlistEntry[]> {
     if (!supabase) {
       console.warn('Supabase not configured, returning empty array')
       return []
@@ -115,10 +115,87 @@ export class SupabaseWaitlistService {
         return []
       }
 
-      return data || []
+      return (data || []).map((entry: SupabaseWaitlistEntry): WaitlistEntry => ({
+        id: entry.id,
+        email: entry.email,
+        created_at: entry.created_at,
+        addedAt: entry.created_at ? new Date(entry.created_at) : undefined,
+        usedAt: entry.converted_at ? new Date(entry.converted_at) : null,
+        isUsed: !!(entry.status === 'converted' || entry.converted_at),
+        status: entry.status,
+        converted_at: entry.converted_at
+      }))
     } catch (error) {
       console.error('Error fetching recent entries:', error)
       return []
+    }
+  }
+
+  /**
+   * Get waitlist entries with server-side filtering and pagination
+   */
+  static async getEntriesWithFilters(options: {
+    search?: string
+    filter?: string // all, used, unused
+    limit?: number
+    offset?: number
+  }): Promise<{ entries: SupabaseWaitlistEntry[], total: number }> {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning empty result')
+      return { entries: [], total: 0 }
+    }
+
+    const { search = '', filter = 'all', limit = 50, offset = 0 } = options
+
+    try {
+      let query = supabase
+        .from('waitlist')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+
+      // Apply search filter
+      if (search) {
+        query = query.ilike('email', `%${search}%`)
+      }
+
+      // Apply status filter
+      if (filter === 'used') {
+        query = query.or('status.eq.converted,converted_at.not.is.null')
+      } else if (filter === 'unused') {
+        query = query.is('status', null).is('converted_at', null)
+      }
+
+      // Apply pagination
+      if (limit) {
+        query = query.limit(limit)
+      }
+      if (offset) {
+        query = query.range(offset, offset + limit - 1)
+      }
+
+      const { data, error, count } = await query
+
+      if (error) {
+        console.error('Supabase filtered entries error:', error)
+        return { entries: [], total: 0 }
+      }
+
+      return {
+        entries: (data || []).map((entry: SupabaseWaitlistEntry): WaitlistEntry => ({
+          id: entry.id,
+          email: entry.email,
+          created_at: entry.created_at,
+          addedAt: entry.created_at ? new Date(entry.created_at) : undefined,
+          usedAt: entry.converted_at ? new Date(entry.converted_at) : null,
+          isUsed: !!(entry.status === 'converted' || entry.converted_at),
+          status: entry.status,
+          converted_at: entry.converted_at
+        })),
+        total: count || 0
+      }
+    } catch (error) {
+      console.error('Get entries with filters error:', error)
+      return { entries: [], total: 0 }
     }
   }
 

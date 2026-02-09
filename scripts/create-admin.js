@@ -8,12 +8,25 @@ const prisma = new PrismaClient({
 
 async function createAdmin() {
   try {
-    // Admin user details
+    // Validate required environment variables
+    const requiredEnvVars = ['ADMIN_EMAIL', 'ADMIN_PASSWORD', 'ADMIN_NAME', 'ADMIN_ROLE']
+    const missingVars = requiredEnvVars.filter(varName => !process.env[varName])
+    
+    if (missingVars.length > 0) {
+      console.error('❌ Missing required environment variables:')
+      missingVars.forEach(varName => {
+        console.error(`   ${varName}`)
+      })
+      console.error('\nPlease set these environment variables and run the script again.')
+      process.exit(1)
+    }
+
+    // Admin user details from environment
     const adminData = {
-      email: 'admin@bidforge.com', // Change this to your desired admin email
-      name: 'System Administrator',
-      password: 'Grace@12', // Change this to a secure password
-      role: 'ADMIN'
+      email: process.env.ADMIN_EMAIL,
+      name: process.env.ADMIN_NAME,
+      password: process.env.ADMIN_PASSWORD,
+      role: process.env.ADMIN_ROLE
     }
 
     // Hash the password

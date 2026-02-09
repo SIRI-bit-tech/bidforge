@@ -264,13 +264,6 @@ export default function AdminAnalyticsPage() {
                       <Icon className={`h-6 w-6 ${card.color}`} />
                     </div>
                   </div>
-                  {/* Mini trend indicator */}
-                  <div className="absolute top-2 right-2">
-                    <div className="flex items-center text-xs text-green-600">
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      +12%
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             )
@@ -353,7 +346,7 @@ export default function AdminAnalyticsPage() {
                     labels: details?.revenueData?.map((item: any) => new Date(item.date).toLocaleDateString('en-US', { month: 'short' })) || [],
                     datasets: [{
                       label: 'Pro Upgrades',
-                      data: details?.revenueData?.map((item: any) => item.upgrades * 29) || [], // $29 per pro upgrade
+                      data: details?.revenueData?.map((item: any) => item.revenue) || [], // Use precomputed revenue from server
                       borderColor: 'rgb(99, 102, 241)',
                       backgroundColor: 'rgba(99, 102, 241, 0.1)',
                       borderWidth: 3,
@@ -413,7 +406,7 @@ export default function AdminAnalyticsPage() {
         </div>
 
         {/* Detailed Analytics Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
           {/* Plan Distribution with Pie Chart */}
           <Card>
             <CardHeader>
@@ -426,9 +419,9 @@ export default function AdminAnalyticsPage() {
               <div className="h-64">
                 <Pie
                   data={{
-                    labels: Object.keys(details.planDistribution || {}),
+                    labels: Object.keys(details?.planDistribution || {}),
                     datasets: [{
-                      data: Object.values(details.planDistribution || {}),
+                      data: Object.values(details?.planDistribution || {}),
                       backgroundColor: [
                         'rgb(99, 102, 241)',
                         'rgb(34, 197, 94)',
@@ -459,8 +452,10 @@ export default function AdminAnalyticsPage() {
                         callbacks: {
                           label: function(context) {
                             const label = context.label || ''
+                            const dataset = Array.isArray(context.dataset?.data) ? context.dataset.data : []
+                            const total = dataset.reduce((a: number, b: number) => a + b, 0)
+                            if (total === 0) return `${label}: 0 (0%)`
                             const value = context.parsed || 0
-                            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
                             const percentage = Math.round((value / total) * 100)
                             return `${label}: ${value} (${percentage}%)`
                           }
@@ -490,25 +485,25 @@ export default function AdminAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {details.recent.users?.slice(0, 6).map((user: any, userIndex: number) => (
+                {(details?.recent?.users ?? []).slice(0, 6).map((user: any, userIndex: number) => (
                   <div key={user.id || `user-${userIndex}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-primary to-indigo-600 rounded-full flex items-center justify-center">
                         <span className="text-white font-bold text-sm">
-                          {user.name.substring(0, 2).toUpperCase()}
+                          {(user?.name ?? '').substring(0, 2).toUpperCase()}
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <p className="font-medium">{user?.name ?? 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground">{user?.email ?? 'No email'}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(user.createdAt)}
+                        {formatDate(user?.createdAt)}
                       </p>
                       <Badge variant="outline" className="text-xs mt-1">
-                        {user.role || 'User'}
+                        {user?.role ?? 'User'}
                       </Badge>
                     </div>
                   </div>
@@ -530,20 +525,20 @@ export default function AdminAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {details.recent.companies?.slice(0, 6).map((company: any, companyIndex: number) => (
+                {(details?.recent?.companies ?? []).slice(0, 6).map((company: any, companyIndex: number) => (
                   <div key={company.id || `company-${companyIndex}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                         <Building2 className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <p className="font-medium">{company.name}</p>
-                        <p className="text-xs text-muted-foreground">{company.email}</p>
+                        <p className="font-medium">{company?.name ?? 'Unknown Company'}</p>
+                        <p className="text-xs text-muted-foreground">{company?.email ?? 'No email'}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(company.createdAt)}
+                        {formatDate(company?.createdAt)}
                       </p>
                       <div className="flex items-center gap-1 mt-1">
                         <TrendingUp className="h-3 w-3 text-green-500" />

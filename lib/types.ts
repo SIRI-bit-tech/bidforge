@@ -241,7 +241,7 @@ export interface AdminCompany extends Company {
 export interface WaitlistEntry {
   id: string
   email: string
-  created_at?: string
+  created_at: string
   addedAt?: Date
   usedAt?: Date | null
   isUsed?: boolean

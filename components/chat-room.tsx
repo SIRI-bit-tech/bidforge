@@ -93,34 +93,38 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         // Merge database messages with Ably messages, avoiding duplicates
                         setMessages((prev) => {
                             const combined = [...prev]
-
-                            // Create a set of existing serials for fast lookup
                             const existingSerials = new Set(combined.map(m => m.serial))
+                            const existingContentTimestamps = new Set()
+
+                            // Create a set of content+timestamp pairs for faster duplicate detection
+                            combined.forEach(m => {
+                                const timestamp = typeof m.timestamp === 'number' ? m.timestamp : 0
+                                const key = `${m.text}-${Math.floor(timestamp / 1000)}`
+                                existingContentTimestamps.add(key)
+                            })
 
                             historicalMessages.forEach(ablyMsg => {
-                                // 1. Check if serial already exists
+                                // Check by serial first
                                 if (ablyMsg.serial && existingSerials.has(ablyMsg.serial)) {
                                     return
                                 }
 
-                                // 2. Check if content matches (fallback for messages without matching serials)
-                                const exists = combined.some(existingMsg =>
-                                    existingMsg.text === ablyMsg.text &&
-                                    typeof existingMsg.timestamp === 'number' &&
-                                    typeof ablyMsg.timestamp === 'number' &&
-                                    Math.abs(existingMsg.timestamp - ablyMsg.timestamp) < 1000 // Within 1 second
-                                )
-
-                                if (!exists) {
-                                    combined.push(ablyMsg)
-                                    if (ablyMsg.serial) existingSerials.add(ablyMsg.serial)
+                                // Check by content and timestamp (within 1 second)
+                                const ablyTimestamp = typeof ablyMsg.timestamp === 'number' ? ablyMsg.timestamp : 0
+                                const contentKey = `${ablyMsg.text}-${Math.floor(ablyTimestamp / 1000)}`
+                                if (existingContentTimestamps.has(contentKey)) {
+                                    return
                                 }
+
+                                // Add the message if not duplicate
+                                combined.push(ablyMsg)
+                                if (ablyMsg.serial) existingSerials.add(ablyMsg.serial)
+                                existingContentTimestamps.add(contentKey)
                             })
 
-                            // Final safety check: Deduplicate by serial again just in case
+                            // Final deduplication by serial
                             const uniqueMessagesMap = new Map()
                             combined.forEach(msg => {
-                                // If duplicate serial, keep the one that looks like an Ably ID (longer) or just the last one
                                 if (!uniqueMessagesMap.has(msg.serial)) {
                                     uniqueMessagesMap.set(msg.serial, msg)
                                 }
@@ -138,24 +142,22 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
 
                         // 4. Setup subscriptions only after attached and history loaded
                         const msgSub = r.messages.subscribe((msg) => {
-                            console.log('📨 Received message:', {
-                                serial: msg.message.serial,
-                                text: msg.message.text,
-                                clientId: msg.message.clientId,
-                                timestamp: msg.message.timestamp
-                            })
-
                             setMessages((prev) => {
-                                console.log('Current messages count:', prev.length)
 
-                                // Deduplicate by serial
-                                if (msg.message.serial && prev.some(m => m.serial === msg.message.serial)) {
-                                    console.log('⚠️ Duplicate message (same serial), skipping')
+                                // Improved deduplication logic
+                                const existingMessage = prev.find(m => 
+                                    m.serial === msg.message.serial || 
+                                    (m.text === msg.message.text && 
+                                     typeof m.timestamp === 'number' &&
+                                     typeof msg.message.timestamp === 'number' &&
+                                     Math.abs(m.timestamp - msg.message.timestamp) < 1000)
+                                )
+
+                                if (existingMessage) {
                                     return prev
                                 }
 
                                 // Remove optimistic placeholder if it matches
-                                // Match by text and approximate timestamp (within 5 seconds)
                                 const filtered = prev.filter(m => {
                                     const isOptimistic = m.serial?.toString().startsWith('optimistic-')
                                     if (!isOptimistic) return true
@@ -166,14 +168,12 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                         Math.abs(m.timestamp - msg.message.timestamp) < 5000
 
                                     if (textMatches && timeClose) {
-                                        console.log('🔄 Replacing optimistic message with real one')
                                         return false // Remove this optimistic message
                                     }
                                     return true
                                 })
 
                                 const newMessages = [...filtered, msg.message]
-                                console.log('✅ Added message, total:', newMessages.length)
                                 return newMessages
                             })
                             setTimeout(() => {

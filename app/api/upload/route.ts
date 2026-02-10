@@ -6,13 +6,22 @@ import { logError } from "@/lib/logger"
 // File upload API route for blueprints and documents
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
+    // Verify authentication - accept both Bearer token and cookie
+    let token: string | null = null
+
+    // Try Bearer token first
     const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.substring(7)
+    } else {
+      // Fall back to cookie
+      token = request.cookies.get('auth-token')?.value || null
+    }
+
+    if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
     const user = await verifyJWT(token)
 
     if (!user) {
@@ -51,9 +60,9 @@ export async function POST(request: NextRequest) {
       errorType: 'upload_error',
       severity: 'high'
     })
-    
+
     return NextResponse.json(
-      { error: "Upload failed"  },
+      { error: "Upload failed" },
       { status: 500 }
     )
   }

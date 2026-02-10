@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Loader2, ArrowLeft } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { MessageFileUpload, AttachmentDisplay } from "./message-file-upload"
 
 interface ChatRoomProps {
     projectId: string
@@ -47,6 +48,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
         })
     }, [existingMessages, users, currentUser])
     const [newMessage, setNewMessage] = useState("")
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [isTyping, setIsTyping] = useState(false)
     const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
     const [isSending, setIsSending] = useState(false)
@@ -143,14 +145,20 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         // 4. Setup subscriptions only after attached and history loaded
                         const msgSub = r.messages.subscribe((msg) => {
                             setMessages((prev) => {
-
-                                // Improved deduplication logic
+                                // Improved deduplication logic - more comprehensive checks
                                 const existingMessage = prev.find(m => 
+                                    // Check by serial first (most reliable)
                                     m.serial === msg.message.serial || 
+                                    // Check by exact text and sender (within 5 seconds)
                                     (m.text === msg.message.text && 
+                                     m.clientId === msg.message.clientId &&
                                      typeof m.timestamp === 'number' &&
                                      typeof msg.message.timestamp === 'number' &&
-                                     Math.abs(m.timestamp - msg.message.timestamp) < 1000)
+                                     Math.abs(m.timestamp - msg.message.timestamp) < 5000) ||
+                                    // Check by exact text only (last resort for same session)
+                                    (m.text === msg.message.text && 
+                                     m.clientId === msg.message.clientId &&
+                                     prev.filter(p => p.text === msg.message.text).length > 2)
                                 )
 
                                 if (existingMessage) {
@@ -174,7 +182,16 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                 })
 
                                 const newMessages = [...filtered, msg.message]
-                                return newMessages
+                                
+                                // Final safety check - remove any duplicates that might have slipped through
+                                const finalMessages = newMessages.filter((msg, index, self) => 
+                                    index === self.findIndex(m => 
+                                        m.serial === msg.serial || 
+                                        (m.text === msg.text && m.clientId === msg.clientId)
+                                    )
+                                )
+                                
+                                return finalMessages
                             })
                             setTimeout(() => {
                                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -235,32 +252,71 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
 
     const handleSendMessage = async () => {
         const messageText = newMessage.trim()
-        if (!room || !messageText || !currentUser || isSending) return
+        if (!room || (!messageText && selectedFiles.length === 0) || !currentUser || isSending) return
 
         setIsSending(true)
         try {
+            // Upload files first if any
+            let uploadedAttachments = []
+            if (selectedFiles.length > 0) {
+                for (const file of selectedFiles) {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    formData.append('folder', 'messages')
+
+                    const uploadResponse = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    })
+
+                    if (uploadResponse.ok) {
+                        const uploadResult = await uploadResponse.json()
+                        uploadedAttachments.push({
+                            id: uploadResult.file.key,
+                            fileName: uploadResult.file.name,
+                            originalName: file.name,
+                            fileType: file.type,
+                            fileSize: file.size,
+                            url: uploadResult.file.url
+                        })
+                    } else {
+                        console.error('Failed to upload file:', file.name, uploadResponse.statusText)
+                        // You could show a toast notification here
+                    }
+                }
+            }
+
+            // Create message text with file info if needed
+            let finalMessageText = messageText
+            if (!finalMessageText && uploadedAttachments.length > 0) {
+                finalMessageText = `Sent ${uploadedAttachments.length} file${uploadedAttachments.length > 1 ? 's' : ''}`
+            }
+
             // Optimistic update
             const optimisticMsg: any = {
                 serial: `optimistic-${Date.now()}`,
-                text: messageText,
+                text: finalMessageText,
                 clientId: currentUser.id,
                 timestamp: Date.now(),
                 metadata: {
                     senderId: currentUser.id,
                     senderName: currentUser.name,
                     projectId,
+                    attachments: uploadedAttachments
                 },
             }
 
             setMessages((prev) => [...prev, optimisticMsg])
             setNewMessage("")
+            setSelectedFiles([]) // Clear selected files after sending
 
             await room.messages.send({
-                text: messageText,
+                text: finalMessageText,
                 metadata: {
                     senderId: currentUser.id,
                     senderName: currentUser.name,
                     projectId,
+                    attachments: uploadedAttachments
                 },
             })
 
@@ -275,7 +331,8 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                 body: JSON.stringify({
                     projectId,
                     receiverId: recipientId,
-                    text: messageText,
+                    text: finalMessageText,
+                    attachments: uploadedAttachments
                 }),
             })
         } catch (error) {
@@ -313,6 +370,14 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
             e.preventDefault()
             handleSendMessage()
         }
+    }
+
+    const handleFileSelect = (files: File[]) => {
+        setSelectedFiles(prev => [...prev, ...files])
+    }
+
+    const handleRemoveFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index))
     }
 
     if (ablyError && !room) {
@@ -427,6 +492,34 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                                 }`}
                                         >
                                             <p className="text-sm leading-relaxed">{msg.text}</p>
+                                            {(() => {
+                                                const attachments = msg.metadata?.attachments;
+                                                if (!attachments) return null;
+                                                
+                                                // Handle case where attachments might be a JSON string
+                                                const parsedAttachments = typeof attachments === 'string' 
+                                                    ? JSON.parse(attachments) 
+                                                    : attachments;
+                                                
+                                                if (!Array.isArray(parsedAttachments) || parsedAttachments.length === 0) return null;
+                                                
+                                                return (
+                                                    <div className="mt-2">
+                                                        <AttachmentDisplay
+                                                            attachments={parsedAttachments}
+                                                            onDownload={(attachment) => {
+                                                                // Create a temporary link and trigger download
+                                                                const link = document.createElement('a')
+                                                                link.href = attachment.url
+                                                                link.download = attachment.originalName || attachment.fileName
+                                                                document.body.appendChild(link)
+                                                                link.click()
+                                                                document.body.removeChild(link)
+                                                            }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                         <span className="text-xs text-gray-400 mt-1 px-2">
                                             {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
@@ -442,12 +535,13 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
 
             {/* Fixed Input Area */}
             <div className="flex-shrink-0 px-6 py-4 border-t border-gray-100 bg-white">
-                <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600 flex-shrink-0">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
-                    </Button>
+                <MessageFileUpload
+                    onFileSelect={handleFileSelect}
+                    selectedFiles={selectedFiles}
+                    onRemoveFile={handleRemoveFile}
+                    disabled={isSending}
+                />
+                <div className="flex items-center gap-3 mt-2">
                     <div className="flex-1 relative">
                         <Input
                             ref={inputRef}
@@ -465,7 +559,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                             onClick={handleSendMessage}
                             disabled={!newMessage.trim() || isSending}
                             size="sm"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full h-8 w-8 p-0 bg-pink-500 hover:bg-pink-600 text-white"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full h-8 w-8 p-0 bg-gray-600 hover:bg-gray-700 text-white"
                         >
                             {isSending ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -474,11 +568,6 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                             )}
                         </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600 flex-shrink-0">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                    </Button>
                 </div>
             </div>
         </div>

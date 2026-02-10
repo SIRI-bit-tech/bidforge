@@ -22,9 +22,9 @@ export function getRateLimitKey(request: NextRequest, prefix: string): string {
   const realIp = request.headers.get('x-real-ip')
   const cfConnectingIp = request.headers.get('cf-connecting-ip') // Cloudflare
   const xForwardedFor = request.headers.get('x-forwarded-for')
-  
+
   let ip = 'unknown'
-  
+
   if (cfConnectingIp) {
     ip = cfConnectingIp
   } else if (realIp) {
@@ -34,11 +34,11 @@ export function getRateLimitKey(request: NextRequest, prefix: string): string {
   } else if (xForwardedFor) {
     ip = xForwardedFor.split(',')[0].trim()
   }
-  
+
   // For authenticated requests, also include user ID if available
   const authToken = request.cookies.get('auth-token')?.value
   const userSuffix = authToken ? `:${authToken.slice(-8)}` : ''
-  
+
   return `ratelimit:${prefix}:${ip}${userSuffix}`
 }
 
@@ -47,18 +47,18 @@ export async function checkRateLimit(key: string, config: RateLimitConfig): Prom
     const now = Date.now()
     const windowStart = now - config.windowMs
     const resetTime = now + config.windowMs
-    
+
     // Use Redis for distributed rate limiting
     const currentCount = await cache.incr(key, Math.ceil(config.windowMs / 1000))
-    
+
     if (currentCount === 1) {
       // First request in window, set expiration
       await cache.set(key, currentCount, Math.ceil(config.windowMs / 1000))
     }
-    
+
     const allowed = currentCount <= config.maxAttempts
     const remaining = Math.max(0, config.maxAttempts - currentCount)
-    
+
     return {
       allowed,
       remaining,
@@ -78,7 +78,7 @@ export async function checkRateLimit(key: string, config: RateLimitConfig): Prom
 
 // Advanced rate limiting with sliding window
 export async function checkSlidingWindowRateLimit(
-  key: string, 
+  key: string,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
   try {
@@ -94,14 +94,14 @@ export async function checkSlidingWindowRateLimit(
       // Set expiration
       ['expire', key, Math.ceil(config.windowMs / 1000)]
     ]
-    
+
     // Execute pipeline (would need Redis pipeline support)
     const currentCount = await cache.incr(key, Math.ceil(config.windowMs / 1000))
-    
+
     const allowed = currentCount <= config.maxAttempts
     const remaining = Math.max(0, config.maxAttempts - currentCount)
     const resetTime = now + config.windowMs
-    
+
     return {
       allowed,
       remaining,
@@ -141,7 +141,7 @@ export const RATE_LIMITS = {
     maxAttempts: 10, // Increased for legitimate users
     keyPrefix: 'login'
   } as const,
-  
+
   // API endpoints
   API_GENERAL: {
     windowMs: 60 * 1000, // 1 minute
@@ -158,7 +158,7 @@ export const RATE_LIMITS = {
     maxAttempts: 60, // 60 searches per minute
     keyPrefix: 'search'
   },
-  
+
   // WebSocket connections
   WEBSOCKET_CONNECT: {
     windowMs: 60 * 1000, // 1 minute
@@ -170,14 +170,14 @@ export const RATE_LIMITS = {
     maxAttempts: 120, // 120 messages per minute (2 per second)
     keyPrefix: 'ws_message'
   },
-  
+
   // Password reset
   PASSWORD_RESET: {
     windowMs: 60 * 60 * 1000, // 1 hour
     maxAttempts: 3,
     keyPrefix: 'password_reset'
   },
-  
+
   // Contact/support
   CONTACT_FORM: {
     windowMs: 60 * 60 * 1000, // 1 hour
@@ -212,15 +212,15 @@ export async function getAdaptiveRateLimit(baseConfig: RateLimitConfig): Promise
     // Get system metrics (would integrate with monitoring)
     const systemLoad = 0.5 // Placeholder - get from monitoring
     const redisHealth = await cache.ping()
-    
+
     let multiplier = 1
-    
+
     if (systemLoad > 0.8) {
       multiplier = 0.5 // Reduce limits when system is under high load
     } else if (systemLoad < 0.3 && redisHealth) {
       multiplier = 1.5 // Increase limits when system is healthy
     }
-    
+
     return {
       ...baseConfig,
       maxAttempts: Math.floor(baseConfig.maxAttempts * multiplier)

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { MessageSquare, Search } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { MessageSquare, Search, MoreHorizontal, Trash2 } from "lucide-react"
 import { ChatRoom } from "@/components/chat-room"
 import { Message, Project, User } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
@@ -217,7 +218,9 @@ export default function MessagesPage() {
     // Poll every 5 seconds
     const interval = setInterval(pollMessages, 5000)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+    }
   }, [selectedConv, currentUser, getMessagesByUser])
 
   // Mark messages as read when conversation is selected
@@ -267,6 +270,32 @@ export default function MessagesPage() {
   const handleBackToConversations = () => {
     setSelectedConversation(null)
     setShowConversationsList(true)
+  }
+
+  const handleDeleteConversation = async (projectId: string, otherUserId: string) => {
+    if (!confirm('Are you sure you want to delete this entire conversation? This action cannot be undone.')) return
+
+    try {
+      const response = await fetch(`/api/messages/conversation?projectId=${projectId}&otherUserId=${otherUserId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        // Refresh messages to update conversation list
+        if (currentUser) {
+          await getMessagesByUser(currentUser.id)
+        }
+        // If the deleted conversation was selected, go back to conversation list
+        if (selectedConversation === `${projectId}::${otherUserId}`) {
+          setSelectedConversation(null)
+          setShowConversationsList(true)
+        }
+      } else {
+        console.error('Failed to delete conversation')
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+    }
   }
 
   if (!currentUser) return null
@@ -349,36 +378,53 @@ export default function MessagesPage() {
                             {conversation.otherUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        {isSelected && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-card rounded-full" />
-                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="font-semibold text-sm truncate">
-                            {conversation.otherUser.name}
-                          </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-semibold text-sm truncate">
+                          {conversation.otherUser.name}
+                        </p>
+                        <div className="flex items-center gap-2">
                           {conversation.lastMessage && (
                             <span className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(conversation.lastMessage.sentAt), { addSuffix: false })}
                             </span>
                           )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                              >
+                                <MoreHorizontal className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteConversation(conversation.projectId, conversation.otherUser.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Conversation
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        {conversation.lastMessage && (
-                          <p className="text-xs text-muted-foreground truncate mb-1">
-                            {conversation.lastMessage.text}
-                          </p>
+                      </div>
+                      {conversation.lastMessage && (
+                        <p className="text-xs text-muted-foreground truncate mb-1">
+                          {conversation.lastMessage.text}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conversation.project.title}
+                        </p>
+                        {conversation.unreadCount > 0 && (
+                          <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                            {conversation.unreadCount}
+                          </Badge>
                         )}
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground truncate">
-                            {conversation.project.title}
-                          </p>
-                          {conversation.unreadCount > 0 && (
-                            <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
-                              {conversation.unreadCount}
-                            </Badge>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>

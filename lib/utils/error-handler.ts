@@ -14,40 +14,41 @@ const ERROR_MAPPINGS: Record<string, string> = {
   'Failed to fetch': 'Unable to connect to server. Please check your internet connection.',
   'NetworkError': 'Network connection failed. Please try again.',
   'fetch': 'Connection error. Please try again.',
-  
+
   // JSON parsing errors
   'Unexpected end of JSON input': 'Server response error. Please try again.',
   'Unexpected token': 'Server response error. Please try again.',
   'JSON.parse': 'Server response error. Please try again.',
   'SyntaxError': 'Server response error. Please try again.',
-  
+
   // Authentication errors
   'Invalid or expired token': 'Your session has expired. Please log in again.',
   'Authentication required': 'Please log in to continue.',
   'Unauthorized': 'Access denied. Please log in again.',
   'Token expired': 'Your session has expired. Please log in again.',
   'Invalid credentials': 'Invalid email or password.',
-  
+  'Invalid email or password': 'Invalid email or password.',
+
   // Registration errors
   'User already exists': 'An account with this email already exists.',
   'Email already registered': 'An account with this email already exists.',
   'Invalid email format': 'Please enter a valid email address.',
   'Password too weak': 'Password must be at least 8 characters with uppercase, lowercase, and numbers.',
-  
+
   // Validation errors
   'Validation failed': 'Please check your input and try again.',
   'Invalid input': 'Please check your input and try again.',
   'Missing required field': 'Please fill in all required fields.',
-  
+
   // Database errors
   'Database error': 'A temporary error occurred. Please try again.',
   'Connection timeout': 'Request timed out. Please try again.',
   'Internal server error': 'A temporary error occurred. Please try again.',
-  
+
   // Rate limiting
   'Too many requests': 'Too many attempts. Please wait a moment and try again.',
   'Rate limit exceeded': 'Too many attempts. Please wait a moment and try again.',
-  
+
   // File upload errors
   'File too large': 'File size exceeds the maximum limit.',
   'Invalid file type': 'File type not supported.',
@@ -93,12 +94,27 @@ export function sanitizeError(error: any): UserFriendlyError {
     errorCode = error.status.toString()
   }
 
-  // Check for exact matches first
+  // Check for exact matches first - prioritize specific error messages
   for (const [pattern, friendlyMessage] of Object.entries(ERROR_MAPPINGS)) {
-    if (errorMessage.toLowerCase().includes(pattern.toLowerCase())) {
+    if (errorMessage.toLowerCase() === pattern.toLowerCase()) {
       return {
         message: friendlyMessage,
         code: errorCode
+      }
+    }
+  }
+
+  // Then check for partial matches, but exclude login-specific errors
+  const lowerMessage = errorMessage.toLowerCase()
+  if (!lowerMessage.includes('invalid email or password') &&
+    !lowerMessage.includes('invalid credentials') &&
+    !lowerMessage.includes('please verify your email')) {
+    for (const [pattern, friendlyMessage] of Object.entries(ERROR_MAPPINGS)) {
+      if (lowerMessage.includes(pattern.toLowerCase())) {
+        return {
+          message: friendlyMessage,
+          code: errorCode
+        }
       }
     }
   }
@@ -109,6 +125,12 @@ export function sanitizeError(error: any): UserFriendlyError {
       case '400':
         return { message: GENERIC_ERRORS.validation, code: errorCode }
       case '401':
+        // For login, preserve specific error messages instead of generic auth error
+        if (errorMessage.includes('Invalid email or password') ||
+          errorMessage.includes('Invalid credentials') ||
+          errorMessage.includes('Please verify your email')) {
+          return { message: errorMessage, code: errorCode }
+        }
         return { message: GENERIC_ERRORS.authentication, code: errorCode }
       case '403':
         return { message: GENERIC_ERRORS.permission, code: errorCode }
@@ -125,24 +147,22 @@ export function sanitizeError(error: any): UserFriendlyError {
   }
 
   // Categorize by error type patterns
-  const lowerMessage = errorMessage.toLowerCase()
-  
   if (lowerMessage.includes('network') || lowerMessage.includes('connection') || lowerMessage.includes('timeout')) {
     return { message: GENERIC_ERRORS.network, code: errorCode }
   }
-  
+
   if (lowerMessage.includes('json') || lowerMessage.includes('parse') || lowerMessage.includes('syntax')) {
     return { message: 'Server response error. Please try again.', code: errorCode }
   }
-  
+
   if (lowerMessage.includes('auth') || lowerMessage.includes('token') || lowerMessage.includes('login')) {
     return { message: GENERIC_ERRORS.authentication, code: errorCode }
   }
-  
+
   if (lowerMessage.includes('permission') || lowerMessage.includes('forbidden') || lowerMessage.includes('access')) {
     return { message: GENERIC_ERRORS.permission, code: errorCode }
   }
-  
+
   if (lowerMessage.includes('validation') || lowerMessage.includes('invalid') || lowerMessage.includes('required')) {
     return { message: GENERIC_ERRORS.validation, code: errorCode }
   }
@@ -159,7 +179,7 @@ export function sanitizeError(error: any): UserFriendlyError {
  */
 export async function handleApiError(response: Response): Promise<UserFriendlyError> {
   let errorData: any = {}
-  
+
   try {
     // Try to parse JSON error response
     const text = await response.text()
@@ -184,12 +204,12 @@ export async function handleApiError(response: Response): Promise<UserFriendlyEr
 export async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
   try {
     const response = await fetch(url, options)
-    
+
     if (!response.ok) {
       const error = await handleApiError(response)
       throw new Error(error.message)
     }
-    
+
     return response
   } catch (error) {
     // If it's already a sanitized error, re-throw it
@@ -197,7 +217,7 @@ export async function safeFetch(url: string, options?: RequestInit): Promise<Res
       const sanitized = sanitizeError(error)
       throw new Error(sanitized.message)
     }
-    
+
     // Otherwise sanitize and throw
     const sanitized = sanitizeError(error)
     throw new Error(sanitized.message)

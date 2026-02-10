@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
-import { Paperclip, X, FileText, Image, Video, Download } from "lucide-react"
+import { Paperclip, X, FileText, Video, Download, Image } from "lucide-react"
 import { MessageAttachment } from "@/lib/types"
 
 interface MessageFileUploadProps {
@@ -66,8 +66,38 @@ export function MessageFileUpload({
     }
   }
 
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [showImageModal, setShowImageModal] = useState(false)
+
+  const handleImageClick = (imageUrl: string, fileName: string) => {
+    setPreviewImage(imageUrl)
+    setShowImageModal(true)
+    // You could also open in a modal or lightbox
+    console.log('Image clicked:', fileName)
+  }
+
+  const closeImageModal = () => {
+    setShowImageModal(false)
+    setPreviewImage(null)
+  }
+
   const getFileIcon = (file: File) => {
-    if (file.type.startsWith('image/')) return <Image className="h-4 w-4" />
+    if (file.type.startsWith('image/')) {
+      // For images, check if we can create a preview URL
+      const imageUrl = URL.createObjectURL(file)
+      return (
+        <div 
+          className="cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={() => handleImageClick(imageUrl, file.name)}
+        >
+          <img 
+            src={imageUrl} 
+            alt={file.name}
+            className="h-16 w-16 object-cover rounded-lg"
+          />
+        </div>
+      )
+    }
     if (file.type.startsWith('video/')) return <Video className="h-4 w-4" />
     return <FileText className="h-4 w-4" />
   }
@@ -134,6 +164,31 @@ export function MessageFileUpload({
               </Button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl max-h-[80vh]">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Image Preview</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeImageModal}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex justify-center">
+              <img 
+                src={previewImage}
+                alt="Preview"
+                className="max-w-full max-h-[60vh] object-contain"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

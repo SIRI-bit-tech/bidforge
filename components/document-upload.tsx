@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { FileText, Upload, X, CheckCircle, AlertCircle } from "lucide-react"
-import { uploadToCloudinaryClient } from "@/lib/services/cloudinary"
+import { useUploadThing } from "@/lib/services/uploadthing"
 import { useStore } from "@/lib/store"
 
 interface DocumentUploadProps {
@@ -35,6 +35,7 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string>("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { startUpload } = useUploadThing("projectDocument")
 
   const handleFileSelect = () => {
     fileInputRef.current?.click()
@@ -100,24 +101,22 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
     try {
       const uploadedDocuments = []
 
-      // Upload each file to Cloudinary
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i]
+      const uploaded = await startUpload(selectedFiles)
 
-        // Upload to Cloudinary with progress tracking
-        const cloudinaryResult = await uploadToCloudinaryClient(file, (progress) => {
-          // Calculate overall progress across all files
-          const fileProgress = (i / selectedFiles.length) * 100 + (progress / selectedFiles.length)
-          setUploadProgress(Math.min(fileProgress, 95))
-        })
+      if (!uploaded || uploaded.length === 0) {
+        throw new Error("Failed to upload documents")
+      }
 
-        // Save document metadata to database
+      for (let i = 0; i < uploaded.length; i++) {
+        const file = uploaded[i]
+        const originalFile = selectedFiles[i]
+
         const documentData = {
           projectId,
-          name: file.name,
+          name: originalFile?.name ?? file.name,
           type: documentType,
-          url: cloudinaryResult.secure_url,
-          size: file.size,
+          url: file.serverData.url,
+          size: originalFile?.size ?? file.size,
           uploadedBy: currentUser.id,
         }
 
@@ -136,6 +135,9 @@ export function DocumentUpload({ projectId, isOpen, onClose, onUploadComplete }:
 
         const result = await response.json()
         uploadedDocuments.push(result.document)
+
+        const fileProgress = ((i + 1) / uploaded.length) * 100
+        setUploadProgress(Math.min(fileProgress, 100))
       }
 
       setUploadProgress(100)

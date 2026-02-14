@@ -53,11 +53,11 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
 
   const sidebarClasses = mobile
     ? "flex w-full flex-col"
-    : "hidden lg:flex lg:fixed lg:top-16 lg:left-0 lg:bottom-0 w-64 flex-col border-r border-border bg-muted/30 z-30"
+    : "hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 w-64 flex-col bg-[#354d61] text-white z-50"
 
   return (
     <aside className={sidebarClasses}>
-      <div className="flex-1 py-6 overflow-hidden">{/* Removed overflow-y-auto */}
+      <div className="flex-1 py-6 overflow-hidden">
         <nav className="space-y-1 px-3">
           {links.map((link) => {
             const Icon = link.icon
@@ -70,7 +70,9 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
                 href={link.href}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative",
-                  isActive ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  isActive
+                    ? "bg-[#f97316] text-white"
+                    : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -92,7 +94,7 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
         <div className="px-3 mt-4">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full text-white/70 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="h-5 w-5" />
             Logout
@@ -100,37 +102,54 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
         </div>
       </div>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-white/10 space-y-3">
         {company ? (
           company.plan === "FREE" ? (
-            <div className="rounded-xl bg-accent/10 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-accent">
+            <div className="rounded-xl bg-white/5 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-[#f97316]">
                 <Zap className="h-4 w-4 fill-current" />
-                <span className="text-xs font-bold uppercase tracking-wider">Free Plan</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Free Plan</span>
               </div>
-              <p className="text-xs text-muted-foreground leading-tight">
+              <p className="text-xs text-white/80 leading-tight">
                 Upgrade to Pro to unlock unlimited projects and advanced bid tools.
               </p>
               <Button
                 size="sm"
-                className="w-full bg-accent hover:bg-accent-hover text-white text-xs h-8"
+                className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white text-xs h-8"
                 onClick={() => router.push("/pricing")}
               >
                 Upgrade Now
               </Button>
             </div>
           ) : (
-            <div className="rounded-xl bg-muted p-4 flex items-center justify-between">
+            <div className="rounded-xl bg-white/5 p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-accent fill-current" />
-                <span className="text-xs font-bold uppercase">{company.plan} Plan</span>
+                <Zap className="h-4 w-4 text-[#f97316] fill-current" />
+                <span className="text-xs font-bold uppercase text-white">{company.plan} Plan</span>
               </div>
-              <Link href="/pricing" className="text-[10px] text-muted-foreground hover:text-foreground underline">
+              <Link href="/pricing" className="text-[10px] text-white/80 hover:text-white underline">
                 Manage
               </Link>
             </div>
           )
         ) : null}
+
+        <div className="mt-2 flex items-center gap-3 rounded-xl bg-white/5 px-3 py-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
+            {(currentUser.name && currentUser.name.charAt(0).toUpperCase()) ||
+              (currentUser.email && currentUser.email.charAt(0).toUpperCase())}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-white">
+              {currentUser.name}
+            </div>
+            {company?.name && (
+              <div className="truncate text-xs text-white/80">
+                {company.name}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </aside>
   )

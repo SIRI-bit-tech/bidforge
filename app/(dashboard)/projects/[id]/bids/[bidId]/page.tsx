@@ -317,7 +317,6 @@ export default function BidDetailPage({
             </Card>
           )}
 
-          {/* Line Items - if available */}
           {bid.lineItems && bid.lineItems.length > 0 && (
             <Card>
               <CardHeader>
@@ -334,9 +333,43 @@ export default function BidDetailPage({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold">{formatCurrency(item.total)}</div>
+                        <div className="font-semibold">
+                          {formatCurrency(item.totalPrice ?? item.total)}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {formatCurrency(item.unitPrice)}/{item.unit}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {bid.alternates && bid.alternates.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Alternates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {bid.alternates.map((alt: any, index: number) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium">{alt.description}</div>
+                        {alt.notes && (
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {alt.notes}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">
+                          {formatCurrency(alt.adjustmentAmount)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Adjustment
                         </div>
                       </div>
                     </div>

@@ -134,6 +134,7 @@ model Project {
   location    String
   city        String?        @db.VarChar(100)
   state       String?        @db.VarChar(50)
+  coverImageUrl String?      @map("cover_image_url") @db.VarChar(512)
   budgetMin   Decimal?       @map("budget_min") @db.Decimal(15, 2)
   budgetMax   Decimal?       @map("budget_max") @db.Decimal(15, 2)
   startDate   DateTime?      @map("start_date")

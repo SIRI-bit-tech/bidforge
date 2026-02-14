@@ -7,7 +7,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BidCard } from "@/components/bid-card"
-import { BidComparisonView } from "@/components/bid-comparison/bid-comparison-view"
 import { EmptyState } from "@/components/empty-state"
 import { StatusBadge } from "@/components/status-badge"
 import { DocumentUpload } from "@/components/document-upload"
@@ -23,13 +22,11 @@ import { Lock } from "lucide-react"
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { projects, companies, users, publishProject, closeProject, loadProjects, loadBids, awardBid, currentUser } = useStore()
+  const { projects, companies, users, publishProject, closeProject, loadProjects, loadBids, currentUser } = useStore()
   const [loading, setLoading] = useState(true)
-  const [isAwarding, setIsAwarding] = useState(false)
   const { toast } = useToast()
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
-  const [showBidComparison, setShowBidComparison] = useState(false)
   const [projectBids, setProjectBids] = useState<any[]>([])
   const { userPlan } = usePlanLimits()
 
@@ -58,41 +55,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     router.push(`/projects/${project?.id}/bids/${bidId}`)
   }
 
-  const handleAwardBid = async (bidId: string) => {
-    try {
-      setIsAwarding(true)
-      await awardBid(bidId)
-
-      toast({
-        title: "Bid Awarded",
-        description: "The project has been awarded successfully.",
-      })
-
-      // Refresh data to ensure consistency with backend
-      const [, bids] = await Promise.all([
-        loadProjects(),
-        loadBids(id)
-      ])
-      setProjectBids(bids)
-
-      router.refresh()
-      setShowBidComparison(false)
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to award bid. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsAwarding(false)
-    }
-  }
-
   const project = projects.find((p) => p.id === id)
 
   // Check if current user is the project owner
   const isProjectOwner = currentUser && project && (project.createdBy === currentUser.id || project.createdById === currentUser.id)
-  const isSubcontractor = currentUser?.role === 'SUBCONTRACTOR'
+  const isSubcontractor = currentUser?.role === "SUBCONTRACTOR"
+  const hasSubmittedBid =
+    isSubcontractor && projectBids.some((bid) => bid.subcontractorId === currentUser?.id)
 
   if (loading) {
     return (
@@ -171,12 +140,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   </Button>
                 )}
                 {/* Subcontractor actions */}
-                {isSubcontractor && project.status === "PUBLISHED" && (
+                {isSubcontractor && project.status === "PUBLISHED" && !hasSubmittedBid && (
                   <Button
                     onClick={() => router.push(`/projects/${project.id}/bid`)}
                     className="w-full lg:w-auto bg-accent hover:bg-accent-hover text-white"
                   >
                     Submit Bid
+                  </Button>
+                )}
+                {isSubcontractor && project.status === "PUBLISHED" && hasSubmittedBid && (
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/my-bids")}
+                    className="w-full lg:w-auto"
+                  >
+                    You already submitted a bid
                   </Button>
                 )}
               </div>
@@ -242,49 +220,24 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 {isProjectOwner ? `Bids Received (${projectBids.length})` : 'Project Bids'}
               </h2>
               {isProjectOwner && projectBids.length > 1 && (
-                <div className="flex gap-2">
-                  <Button
-                    variant={showBidComparison ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowBidComparison(true)}
-                  >
-                    Compare Bids
-                  </Button>
-                  <Button
-                    variant={!showBidComparison ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowBidComparison(false)}
-                  >
-                    List View
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/projects/${project.id}/bid-comparison`)}
+                >
+                  Compare Bids
+                </Button>
               )}
             </div>
 
             {projectBids.length > 0 ? (
-              <>
-                {/* Show comparison view or individual cards */}
-                {isProjectOwner && showBidComparison && projectBids.length > 1 ? (
-                  <BidComparisonView
-                    projectId={project?.id || ''}
-                    bids={projectBids}
-                    companies={companies}
-                    users={users}
-                    onViewBid={handleViewBid}
-                    onAwardBid={handleAwardBid}
-                    canAward={isProjectOwner}
-                    isAwarding={isAwarding}
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {projectBids.map((bid) => {
-                      const subcontractor = users.find((u) => u.id === bid.subcontractorId)
-                      const company = subcontractor ? companies.find((c) => c.id === subcontractor.companyId) : undefined
-                      return <BidCard key={bid.id} bid={bid} company={company} />
-                    })}
-                  </div>
-                )}
-              </>
+              <div className="space-y-4">
+                {projectBids.map((bid) => {
+                  const subcontractor = users.find((u) => u.id === bid.subcontractorId)
+                  const company = subcontractor ? companies.find((c) => c.id === subcontractor.companyId) : undefined
+                  return <BidCard key={bid.id} bid={bid} company={company} />
+                })}
+              </div>
             ) : (
               <EmptyState
                 icon={Users}
@@ -352,13 +305,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               {/* Subcontractor actions */}
               {isSubcontractor && (
                 <>
-                  {project.status === "PUBLISHED" && (
+                  {project.status === "PUBLISHED" && !hasSubmittedBid && (
                     <Button
                       className="w-full justify-start bg-accent hover:bg-accent-hover text-white"
                       onClick={() => router.push(`/projects/${project.id}/bid`)}
                     >
                       <FileText className="h-4 w-4 mr-2" />
                       Submit Bid
+                    </Button>
+                  )}
+                  {project.status === "PUBLISHED" && hasSubmittedBid && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start bg-transparent"
+                      onClick={() => router.push("/my-bids")}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      You already submitted a bid
                     </Button>
                   )}
                   <Button

@@ -120,7 +120,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, status, trades } = body
+    const {
+      title,
+      description,
+      location,
+      budgetMin,
+      budgetMax,
+      startDate,
+      endDate,
+      deadline,
+      status,
+      trades,
+      coverImageUrl,
+      city,
+      state,
+    } = body
 
     if (!title || !description || !location || !deadline) {
       return NextResponse.json(
@@ -137,6 +151,9 @@ export async function POST(request: NextRequest) {
           title,
           description,
           location,
+          city: city || null,
+          state: state || null,
+          coverImageUrl: coverImageUrl || null,
           budgetMin: budgetMin ? Number(budgetMin) : null,
           budgetMax: budgetMax ? Number(budgetMax) : null,
           startDate: startDate ? new Date(startDate) : null,

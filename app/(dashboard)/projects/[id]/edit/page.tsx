@@ -1,7 +1,10 @@
 "use client"
 
-import { useState, type ChangeEvent } from "react"
+import { use, useEffect, useState, type ChangeEvent } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -11,9 +14,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getTradeLabel } from "@/lib/utils/format"
 import type { TradeCategory } from "@/lib/types"
-import { ArrowLeft, Image as ImageIcon } from "lucide-react"
-import Link from "next/link"
-import { usePlanLimits } from "@/hooks/use-plan-limits"
 import { useUploadThing } from "@/lib/services/uploadthing"
 
 const TRADES: TradeCategory[] = [
@@ -29,11 +29,16 @@ const TRADES: TradeCategory[] = [
   "LANDSCAPING",
 ]
 
-export default function NewProjectPage() {
+export default function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
-  const { currentUser, loadProjects } = useStore()
-  const { checkLimit } = usePlanLimits()
+  const { currentUser, projects, loadProjects } = useStore()
+  const [saving, setSaving] = useState(false)
+  const [initialized, setInitialized] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const { startUpload } = useUploadThing("projectImage")
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -45,15 +50,47 @@ export default function NewProjectPage() {
     deadline: "",
     trades: [] as TradeCategory[],
   })
-  const [saving, setSaving] = useState(false)
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const { startUpload } = useUploadThing("projectImage")
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await loadProjects()
+      } catch (error) {
+        console.error("Failed to load projects:", error)
+      } finally {
+        setInitialized(true)
+      }
+    }
+
+    loadData()
+  }, [loadProjects])
+
+  const project = projects.find((project) => project.id === id)
+
+  useEffect(() => {
+    if (!project) return
+
+    setFormData({
+      title: project.title,
+      description: project.description,
+      location: project.location,
+      budgetMin: project.budgetMin ? String(project.budgetMin) : "",
+      budgetMax: project.budgetMax ? String(project.budgetMax) : "",
+      startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
+      endDate: project.endDate ? project.endDate.toISOString().slice(0, 10) : "",
+      deadline: project.deadline ? project.deadline.toISOString().slice(0, 10) : "",
+      trades: project.trades as TradeCategory[],
+    })
+
+    setImagePreview(project.coverImageUrl || null)
+  }, [project])
 
   const handleTradeToggle = (trade: TradeCategory) => {
-    setFormData((prev) => ({
-      ...prev,
-      trades: prev.trades.includes(trade) ? prev.trades.filter((t) => t !== trade) : [...prev.trades, trade],
+    setFormData((previous) => ({
+      ...previous,
+      trades: previous.trades.includes(trade)
+        ? previous.trades.filter((value) => value !== trade)
+        : [...previous.trades, trade],
     }))
   }
 
@@ -71,12 +108,12 @@ export default function NewProjectPage() {
   }
 
   const handleSubmit = async (publish: boolean) => {
-    if (publish && !checkLimit("CREATE_PROJECT")) return
+    if (!project || !currentUser) return
 
     setSaving(true)
 
     try {
-      let coverImageUrl: string | undefined
+      let coverImageUrl = project.coverImageUrl || undefined
 
       if (imageFile) {
         const uploaded = await startUpload([imageFile])
@@ -86,10 +123,10 @@ export default function NewProjectPage() {
         coverImageUrl = uploaded[0].serverData.url
       }
 
-      const response = await fetch('/api/projects', {
-        method: 'POST',
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           title: formData.title,
@@ -100,9 +137,8 @@ export default function NewProjectPage() {
           startDate: formData.startDate,
           endDate: formData.endDate,
           deadline: formData.deadline,
-          trades: formData.trades, // Include selected trades
-          createdById: currentUser?.id,
-          status: publish ? 'PUBLISHED' : 'DRAFT',
+          trades: formData.trades,
+          status: publish ? "PUBLISHED" : project.status,
           coverImageUrl,
         }),
       })
@@ -110,22 +146,24 @@ export default function NewProjectPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create project')
+        throw new Error(data.error || "Failed to update project")
       }
 
       await loadProjects()
 
       toast({
-        title: publish ? "Project Published Successfully!" : "Project Saved as Draft",
-        description: publish ? "Your project is now live and visible to subcontractors." : "Your project has been saved and can be published later.",
+        title: publish ? "Project Republished" : "Project Updated",
+        description: publish
+          ? "Your changes are live and the project is accepting bids."
+          : "Your project details have been updated.",
       })
 
       router.push(`/projects/${data.project.id}`)
     } catch (error) {
-      console.error("Failed to create project:", error)
+      console.error("Failed to update project:", error)
       toast({
-        title: "Failed to Create Project",
-        description: "There was an error creating your project. Please try again.",
+        title: "Failed to Update Project",
+        description: "There was an error updating your project. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -144,15 +182,54 @@ export default function NewProjectPage() {
     formData.deadline &&
     formData.trades.length > 0
 
+  if (!initialized) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading project...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!project) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center">
+          <h1 className="text-xl lg:text-2xl font-bold mb-4">Project Not Found</h1>
+          <p className="text-muted-foreground mb-4">The project you are trying to edit does not exist.</p>
+          <Button onClick={() => router.push("/projects")} className="w-full lg:w-auto">
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser || (project.createdBy !== currentUser.id && project.createdById !== currentUser.id)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center">
+          <h1 className="text-xl lg:text-2xl font-bold mb-4">Access Denied</h1>
+          <p className="text-muted-foreground mb-4">Only the project owner can edit this project.</p>
+          <Button onClick={() => router.push("/projects")} className="w-full lg:w-auto">
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="mb-8">
-        <Link href="/projects" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+        <Link href={`/projects/${project.id}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Projects
+          Back to Project
         </Link>
-        <h1 className="text-3xl font-bold text-foreground mt-4">Create New Project</h1>
-        <p className="text-muted-foreground mt-1">Fill in the details to create a new RFP</p>
+        <h1 className="text-3xl font-bold text-foreground mt-4">Edit Project</h1>
+        <p className="text-muted-foreground mt-1">Update project details or republish to subcontractors</p>
       </div>
 
       <div className="max-w-3xl">
@@ -162,7 +239,7 @@ export default function NewProjectPage() {
             <Input
               id="title"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(event) => setFormData({ ...formData, title: event.target.value })}
               placeholder="Downtown Office Complex - Phase 1"
               required
             />
@@ -173,7 +250,7 @@ export default function NewProjectPage() {
             <Textarea
               id="description"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(event) => setFormData({ ...formData, description: event.target.value })}
               placeholder="Detailed description of the project scope, requirements, and specifications..."
               rows={6}
               required
@@ -185,7 +262,7 @@ export default function NewProjectPage() {
             <Input
               id="location"
               value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              onChange={(event) => setFormData({ ...formData, location: event.target.value })}
               placeholder="City, State"
               required
             />
@@ -196,9 +273,14 @@ export default function NewProjectPage() {
             <div className="flex items-center gap-4">
               <div className="relative h-20 w-32 overflow-hidden rounded-lg border border-dashed border-border flex items-center justify-center bg-muted">
                 {imagePreview ? (
-                  <img src={imagePreview} alt="Project cover preview" className="h-full w-full object-cover" />
+                  <Image
+                    src={imagePreview}
+                    alt="Project cover preview"
+                    fill
+                    className="object-cover"
+                  />
                 ) : (
-                  <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                  <div className="text-xs text-muted-foreground">No image selected</div>
                 )}
               </div>
               <Input
@@ -218,7 +300,7 @@ export default function NewProjectPage() {
                 id="budgetMin"
                 type="number"
                 value={formData.budgetMin}
-                onChange={(e) => setFormData({ ...formData, budgetMin: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, budgetMin: event.target.value })}
                 placeholder="3000000"
                 required
               />
@@ -230,7 +312,7 @@ export default function NewProjectPage() {
                 id="budgetMax"
                 type="number"
                 value={formData.budgetMax}
-                onChange={(e) => setFormData({ ...formData, budgetMax: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, budgetMax: event.target.value })}
                 placeholder="5000000"
                 required
               />
@@ -244,7 +326,7 @@ export default function NewProjectPage() {
                 id="startDate"
                 type="date"
                 value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, startDate: event.target.value })}
                 required
               />
             </div>
@@ -255,7 +337,7 @@ export default function NewProjectPage() {
                 id="endDate"
                 type="date"
                 value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, endDate: event.target.value })}
                 required
               />
             </div>
@@ -266,7 +348,7 @@ export default function NewProjectPage() {
                 id="deadline"
                 type="date"
                 value={formData.deadline}
-                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, deadline: event.target.value })}
                 required
               />
             </div>
@@ -291,7 +373,7 @@ export default function NewProjectPage() {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={() => router.push("/projects")} className="flex-1">
+            <Button variant="outline" onClick={() => router.push(`/projects/${project.id}`)} className="flex-1">
               Cancel
             </Button>
             <Button
@@ -300,14 +382,14 @@ export default function NewProjectPage() {
               className="flex-1"
               disabled={!isValid || saving}
             >
-              Save as Draft
+              Save Changes
             </Button>
             <Button
               onClick={() => handleSubmit(true)}
               className="flex-1 bg-accent hover:bg-accent-hover text-white"
               disabled={!isValid || saving}
             >
-              {saving ? "Creating..." : "Publish Project"}
+              {saving ? "Saving..." : "Save & Publish"}
             </Button>
           </div>
         </div>
@@ -315,3 +397,4 @@ export default function NewProjectPage() {
     </div>
   )
 }
+

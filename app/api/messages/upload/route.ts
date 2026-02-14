@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { v2 as cloudinary } from 'cloudinary'
 import { verifyJWT } from '@/lib/services/auth'
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
 
 // Define allowed file extensions
 const ALLOWED_EXTENSIONS = [
@@ -97,15 +89,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if Cloudinary is configured
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      console.error('Cloudinary configuration missing')
-      return NextResponse.json(
-        { error: 'File upload service is not configured' },
-        { status: 500 }
-      )
-    }
-
     const formData = await request.formData()
     const files = formData.getAll('files') as File[]
     
@@ -124,69 +107,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const uploadedFiles = []
-
-    for (const file of files) {
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        return NextResponse.json(
-          { error: `File ${file.name} is too large. Maximum size is 10MB.` },
-          { status: 400 }
-        )
-      }
-
-      // Validate file type and extension
-      const validExtension = getValidatedExtension(file.name, file.type)
-      if (!validExtension) {
-        return NextResponse.json(
-          { error: `File ${file.name} has an unsupported file type. Allowed types: images, documents, text files, and archives.` },
-          { status: 400 }
-        )
-      }
-
-      try {
-        // Convert file to data URL for Cloudinary upload
-        const dataURL = await fileToDataURL(file)
-        
-        // Generate secure filename with validated extension
-        const timestamp = Date.now()
-        const randomString = Math.random().toString(36).substring(2, 15)
-        const fileName = `${timestamp}_${randomString}`
-        
-        // Determine resource type based on file type
-        const resourceType = file.type.startsWith('image/') ? 'image' : 
-                           file.type.startsWith('video/') ? 'video' : 'raw'
-        
-        // Upload to Cloudinary
-        const uploadResult = await cloudinary.uploader.upload(dataURL, {
-          folder: 'bidforge/messages',
-          public_id: fileName,
-          resource_type: resourceType,
-          use_filename: false,
-          unique_filename: true,
-        })
-        
-        uploadedFiles.push({
-          fileName: uploadResult.public_id,
-          originalName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          url: uploadResult.secure_url,
-        })
-        
-      } catch (uploadError) {
-        console.error('Cloudinary upload error:', uploadError)
-        return NextResponse.json(
-          { error: `Failed to upload ${file.name}. Please try again.` },
-          { status: 500 }
-        )
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      files: uploadedFiles
-    })
+    return NextResponse.json(
+      { error: 'File upload service has been disabled because Cloudinary was removed. Please update to UploadThing-backed uploads.' },
+      { status: 501 }
+    )
 
   } catch (error) {
     console.error('File upload error:', error)

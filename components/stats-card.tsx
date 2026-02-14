@@ -1,34 +1,25 @@
-import type { LucideIcon } from "lucide-react"
-
-interface StatsCardProps {
-  title: string
-  value: string | number
-  icon: LucideIcon
-  description?: string
-  trend?: {
-    value: string
-    positive: boolean
-  }
-}
+import type { StatsCardProps } from "@/lib/types"
 
 export function StatsCard({ title, value, icon: Icon, description, trend }: StatsCardProps) {
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-          <Icon className="h-6 w-6 text-primary" />
+    <div className="rounded-2xl border border-slate-100 bg-card px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </span>
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#fff4ec]">
+          <Icon className="h-4 w-4 text-[#f97316]" />
         </div>
+      </div>
+      <div className="text-3xl font-semibold text-foreground tracking-tight">{value}</div>
+      <div className="mt-1 flex items-center justify-between text-[11px]">
+        {description && <span className="text-muted-foreground">{description}</span>}
         {trend && (
-          <div className={`text-sm font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>
+          <span className={trend.positive ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
             {trend.positive ? "+" : ""}
             {trend.value}
-          </div>
+          </span>
         )}
-      </div>
-      <div>
-        <div className="text-2xl font-bold text-foreground mb-1">{value}</div>
-        <div className="text-sm font-medium text-muted-foreground">{title}</div>
-        {description && <div className="text-xs text-muted-foreground mt-1">{description}</div>}
       </div>
     </div>
   )

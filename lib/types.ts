@@ -1,4 +1,4 @@
-// Core data types for BidForge application
+import type { LucideIcon } from "lucide-react"
 
 export type UserRole = "CONTRACTOR" | "SUBCONTRACTOR" | "ADMIN"
 
@@ -69,6 +69,7 @@ export interface Company {
   subscriptionStatus: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INACTIVE"
   storageUsed: number // in bytes
   verified: boolean
+  experienceRating?: number
   trialStartDate?: Date
   trialEndDate?: Date
   isFounder: boolean
@@ -85,6 +86,7 @@ export interface Project {
   budgetMin?: number
   budgetMax?: number
   budget?: number // Keep for backward compatibility
+  coverImageUrl?: string | null
   startDate: Date | null
   endDate: Date | null
   deadline: Date
@@ -293,4 +295,30 @@ export interface TrialResponse {
   success: boolean
   message: string
   company?: AdminCompany
+}
+
+export type ProjectViewMode = "grid" | "list"
+
+export interface StatsCardTrend {
+  value: string
+  positive: boolean
+}
+
+export interface StatsCardProps {
+  title: string
+  value: string | number
+  icon: LucideIcon
+  description?: string
+  trend?: StatsCardTrend
+}
+
+export interface ProjectCardProps {
+  project: Project
+  bidsCount?: number
+  showActions?: boolean
+  actionLabel?: string
+  actionHref?: string
+  viewMode?: ProjectViewMode
+  onEdit?: () => void
+  onInvite?: () => void
 }

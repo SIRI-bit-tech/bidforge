@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowUpDown, ArrowUp, ArrowDown, Eye, Award } from "lucide-react"
+import { ArrowUpDown, ArrowUp, ArrowDown, Eye, Award, Star } from "lucide-react"
 import { formatCurrency, formatDateTime } from "@/lib/utils/format"
 import { StatusBadge } from "@/components/status-badge"
 import type { Bid, Company, User } from "@/lib/types"
@@ -23,6 +23,33 @@ interface BidComparisonTableProps {
 
 type SortField = 'amount' | 'company' | 'submittedAt' | 'status'
 type SortDirection = 'asc' | 'desc'
+
+const MAX_STARS = 5
+
+function ExperienceRatingDisplay({ rating }: { rating?: number }) {
+  if (rating == null) {
+    return <span className="text-xs text-muted-foreground">No rating yet</span>
+  }
+
+  const rounded = Math.round(rating)
+
+  return (
+    <div className="flex items-center gap-1">
+      <div className="flex items-center">
+        {Array.from({ length: MAX_STARS }).map((_, index) => (
+          <Star
+            key={index}
+            className={cn(
+              "h-3.5 w-3.5",
+              index < rounded ? "fill-accent text-accent" : "text-muted-foreground/40",
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-xs text-muted-foreground">{rating.toFixed(1)}</span>
+    </div>
+  )
+}
 
 export function BidComparisonTable({
   bids,
@@ -105,46 +132,47 @@ export function BidComparisonTable({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border">
+        <div className="rounded-xl border border-border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-[28%]">Subcontractor</TableHead>
+                <TableHead className="w-[18%]">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-auto p-0 font-semibold"
-                    onClick={() => handleSort('amount')}
+                    onClick={() => handleSort("amount")}
                   >
-                    Bid Amount
-                    {getSortIcon('amount')}
+                    Base Bid Price
+                    {getSortIcon("amount")}
                   </Button>
                 </TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead>
+                <TableHead className="w-[14%]">Timeline</TableHead>
+                <TableHead className="w-[18%]">Experience Rating</TableHead>
+                <TableHead className="w-[12%]">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-auto p-0 font-semibold"
-                    onClick={() => handleSort('status')}
+                    onClick={() => handleSort("status")}
                   >
                     Status
-                    {getSortIcon('status')}
+                    {getSortIcon("status")}
                   </Button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="w-[12%]">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-auto p-0 font-semibold"
-                    onClick={() => handleSort('submittedAt')}
+                    onClick={() => handleSort("submittedAt")}
                   >
                     Submitted
-                    {getSortIcon('submittedAt')}
+                    {getSortIcon("submittedAt")}
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right w-[10%]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,44 +181,65 @@ export function BidComparisonTable({
                 const isLowest = Number(bid.totalAmount) === lowestBid
 
                 return (
-                  <TableRow key={bid.id} className={cn(isLowest && "bg-green-50 dark:bg-green-950/20")}>
+                  <TableRow
+                    key={bid.id}
+                    className={cn(
+                      "align-middle",
+                      isLowest && "bg-emerald-50/80 dark:bg-emerald-950/20",
+                    )}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold text-xs">
-                          {company?.name?.substring(0, 2).toUpperCase() || user?.name?.substring(0, 2).toUpperCase() || '??'}
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-accent font-semibold text-xs">
+                          {company?.name?.substring(0, 2).toUpperCase() ||
+                            user?.name?.substring(0, 2).toUpperCase() ||
+                            "??"}
                         </div>
                         <div>
-                          <div className="font-medium">{company?.name || user?.name || 'Unknown'}</div>
-                          <div className="text-xs text-muted-foreground">{company?.type || 'Independent'}</div>
+                          <div className="font-medium">
+                            {company?.name || user?.name || "Unknown"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {company?.type || "Independent"}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className={cn("text-lg font-bold", isLowest && "text-green-600")}>
+                        <span
+                          className={cn(
+                            "text-lg font-semibold",
+                            isLowest && "text-emerald-600",
+                          )}
+                        >
                           {formatCurrency(bid.totalAmount)}
                         </span>
                         {isLowest && (
-                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                            Lowest
+                          <Badge className="text-[10px] bg-emerald-100 text-emerald-800">
+                            Lowest Bid
                           </Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-sm text-muted-foreground">
-                        {bid.lineItems?.length || 0} items • {bid.alternates?.length || 0} alternates
-                        {bid.completionTime && (
-                          <div className="text-xs">{bid.completionTime} days</div>
-                        )}
+                        {bid.completionTime
+                          ? `${bid.completionTime} days`
+                          : "Timeline not set"}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <ExperienceRatingDisplay rating={company?.experienceRating} />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={bid.status} />
                     </TableCell>
                     <TableCell>
                       <div className="text-sm text-muted-foreground">
-                        {bid.submittedAt ? formatDateTime(bid.submittedAt) : 'Draft'}
+                        {bid.submittedAt
+                          ? formatDateTime(bid.submittedAt)
+                          : "Draft"}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -202,21 +251,23 @@ export function BidComparisonTable({
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {canAward && onAwardBid && bid.status === 'SUBMITTED' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onAwardBid(bid.id)}
-                            disabled={isAwarding}
-                            className={cn(
-                              "text-green-600 border-green-600 hover:bg-green-50",
-                              isAwarding && "opacity-50 cursor-not-allowed"
-                            )}
-                          >
-                            <Award className="h-4 w-4 mr-1" />
-                            {isAwarding ? "Awarding..." : "Award"}
-                          </Button>
-                        )}
+                        {canAward &&
+                          onAwardBid &&
+                          bid.status === "SUBMITTED" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onAwardBid(bid.id)}
+                              disabled={isAwarding}
+                              className={cn(
+                                "border-emerald-600 text-emerald-700 hover:bg-emerald-50",
+                                isAwarding && "opacity-50 cursor-not-allowed",
+                              )}
+                            >
+                              <Award className="h-4 w-4 mr-1" />
+                              {isAwarding ? "Awarding..." : "Award Bid"}
+                            </Button>
+                          )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -4,13 +4,14 @@ import { useEffect, useState, useRef, useMemo } from "react"
 import { useAblyChat } from "@/hooks/use-ably-chat"
 import { Room, Message as ChatMessage } from "@ably/chat"
 import { useStore } from "@/lib/store"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Loader2, ArrowLeft } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { MessageFileUpload, AttachmentDisplay } from "./message-file-upload"
+import { useUploadThing } from "@/lib/services/uploadthing"
+import type { MessageAttachment } from "@/lib/types"
 
 interface ChatRoomProps {
     projectId: string
@@ -50,6 +51,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
     const [newMessage, setNewMessage] = useState("")
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [isTyping, setIsTyping] = useState(false)
+    const { startUpload: startMessageUpload } = useUploadThing("messageAttachment")
     const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
     const [isSending, setIsSending] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -257,33 +259,28 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
         setIsSending(true)
         try {
             // Upload files first if any
-            let uploadedAttachments = []
+            let uploadedAttachments: MessageAttachment[] = []
             if (selectedFiles.length > 0) {
-                for (const file of selectedFiles) {
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    formData.append('folder', 'messages')
+                const uploaded = await startMessageUpload(selectedFiles)
 
-                    const uploadResponse = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData
-                    })
-
-                    if (uploadResponse.ok) {
-                        const uploadResult = await uploadResponse.json()
-                        uploadedAttachments.push({
-                            id: uploadResult.file.key,
-                            fileName: uploadResult.file.name,
-                            originalName: file.name,
-                            fileType: file.type,
-                            fileSize: file.size,
-                            url: uploadResult.file.url
-                        })
-                    } else {
-                        console.error('Failed to upload file:', file.name, uploadResponse.statusText)
-                        // You could show a toast notification here
-                    }
+                if (!uploaded || uploaded.length === 0) {
+                    throw new Error("Failed to upload attachments")
                 }
+
+                uploadedAttachments = uploaded.map((file, index): MessageAttachment => {
+                    const original = selectedFiles[index]
+                    const id = file.serverData.url || file.url
+                    return {
+                        id,
+                        messageId: "",
+                        fileName: original?.name ?? file.name,
+                        originalName: original?.name ?? file.name,
+                        fileType: original?.type ?? file.type,
+                        fileSize: original?.size ?? file.size,
+                        url: file.serverData.url,
+                        uploadedAt: new Date(),
+                    }
+                })
             }
 
             // Create message text with file info if needed
@@ -291,6 +288,12 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
             if (!finalMessageText && uploadedAttachments.length > 0) {
                 finalMessageText = `Sent ${uploadedAttachments.length} file${uploadedAttachments.length > 1 ? 's' : ''}`
             }
+
+            // JSON-safe attachment payload for Ably metadata and API body
+            const attachmentsJson = uploadedAttachments.map((attachment) => ({
+                ...attachment,
+                uploadedAt: attachment.uploadedAt.toISOString(),
+            }))
 
             // Optimistic update
             const optimisticMsg: any = {
@@ -302,7 +305,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                     senderId: currentUser.id,
                     senderName: currentUser.name,
                     projectId,
-                    attachments: uploadedAttachments
+                    attachments: attachmentsJson,
                 },
             }
 
@@ -316,7 +319,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                     senderId: currentUser.id,
                     senderName: currentUser.name,
                     projectId,
-                    attachments: uploadedAttachments
+                    attachments: attachmentsJson,
                 },
             })
 
@@ -332,7 +335,7 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                     projectId,
                     receiverId: recipientId,
                     text: finalMessageText,
-                    attachments: uploadedAttachments
+                    attachments: attachmentsJson,
                 }),
             })
         } catch (error) {

@@ -761,6 +761,18 @@ export const useStore = create<AppState>((set, get) => ({
         submittedAt: bid.submittedAt ? new Date(bid.submittedAt) : undefined,
         createdAt: new Date(bid.createdAt),
         updatedAt: new Date(bid.updatedAt),
+        completionTime: typeof bid.completionTime === "number" ? bid.completionTime : bid.completionTime ? parseInt(bid.completionTime, 10) : undefined,
+        lineItems: (bid.lineItems || []).map((item: any) => ({
+          ...item,
+          quantity: typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity),
+          unitPrice: typeof item.unitPrice === "number" ? item.unitPrice : parseFloat(item.unitPrice),
+          totalPrice: typeof item.totalPrice === "number" ? item.totalPrice : parseFloat(item.totalPrice),
+          total: typeof item.totalPrice === "number" ? item.totalPrice : parseFloat(item.totalPrice),
+        })),
+        alternates: (bid.alternates || []).map((alt: any) => ({
+          ...alt,
+          adjustmentAmount: typeof alt.adjustmentAmount === "number" ? alt.adjustmentAmount : parseFloat(alt.adjustmentAmount),
+        })),
       }))
 
       // Update local state with loaded bids

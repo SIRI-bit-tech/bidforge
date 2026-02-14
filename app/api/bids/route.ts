@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     const requestBody = await request.json()
     projectId = requestBody.projectId
-    const { totalAmount, notes } = requestBody
+    const { totalAmount, notes, lineItems, alternates, completionTime } = requestBody
 
     if (!projectId || !totalAmount || totalAmount <= 0) {
       return NextResponse.json(
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create the bid and notification in a transaction
+    // Create the bid, line items, alternates, and notification in a transaction
     const result = await prisma.$transaction(async (tx: any) => {
       const newBid = await tx.bid.create({
         data: {
@@ -101,9 +101,38 @@ export async function POST(request: NextRequest) {
           totalAmount: totalAmount,
           status: 'SUBMITTED',
           notes: notes || null,
+          completionTime: completionTime || null,
           submittedAt: new Date(),
         }
       })
+
+      // Optional: create line items if provided
+      if (Array.isArray(lineItems) && lineItems.length > 0) {
+        await tx.lineItem.createMany({
+          data: lineItems.map((item: any, index: number) => ({
+            bidId: newBid.id,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            totalPrice: String(Number(item.quantity) * Number(item.unitPrice)),
+            notes: item.notes || null,
+            sortOrder: index,
+          })),
+        })
+      }
+
+      // Optional: create alternates if provided
+      if (Array.isArray(alternates) && alternates.length > 0) {
+        await tx.alternate.createMany({
+          data: alternates.map((alt: any) => ({
+            bidId: newBid.id,
+            description: alt.description,
+            adjustmentAmount: alt.adjustmentAmount,
+            notes: alt.notes || null,
+          })),
+        })
+      }
 
       const notification = await tx.notification.create({
         data: {
@@ -208,7 +237,9 @@ export async function GET(request: NextRequest) {
         },
         subcontractor: {
           select: { name: true, email: true }
-        }
+        },
+        lineItems: true,
+        alternates: true,
       },
       orderBy: {
         createdAt: 'desc'
@@ -218,7 +249,17 @@ export async function GET(request: NextRequest) {
     // Serialize Decimals
     const formattedBids = bids.map((bid: any) => ({
       ...bid,
-      totalAmount: bid.totalAmount.toString()
+      totalAmount: bid.totalAmount.toString(),
+      lineItems: (bid.lineItems || []).map((item: any) => ({
+        ...item,
+        quantity: item.quantity.toString(),
+        unitPrice: item.unitPrice.toString(),
+        totalPrice: item.totalPrice.toString(),
+      })),
+      alternates: (bid.alternates || []).map((alt: any) => ({
+        ...alt,
+        adjustmentAmount: alt.adjustmentAmount.toString(),
+      })),
     }))
 
     return NextResponse.json({

@@ -1,15 +1,27 @@
 "use client"
 
+import { useState } from "react"
 import { useStore } from "@/lib/store"
 import { StatsCard } from "@/components/stats-card"
 import { ProjectCard } from "@/components/project-card"
 import { BidCard } from "@/components/bid-card"
 import { EmptyState } from "@/components/empty-state"
-import { Folder, DollarSign, TrendingUp, Clock, Plus, Inbox } from "lucide-react"
+import {
+  Folder,
+  Layers,
+  DollarSign,
+  TrendingUp,
+  BarChart3,
+  Trophy,
+  Inbox,
+  LayoutGrid,
+  List,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { formatCurrency } from "@/lib/utils/format"
 import { UsageTracker } from "@/components/usage-tracker"
+import type { ProjectViewMode } from "@/lib/types"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -42,21 +54,15 @@ export default function DashboardPage() {
   const pendingInvitations = getInvitationsBySubcontractor(currentUser.id).filter((inv) => inv.status === "PENDING")
   const totalBidValue = userBids.reduce((sum, b) => sum + b.totalAmount, 0)
 
+  const [viewMode, setViewMode] = useState<ProjectViewMode>("grid")
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            {isContractor ? "Manage your projects and review bids" : "Track your bids and opportunities"}
-          </p>
-        </div>
-        {isContractor && (
-          <Button onClick={() => router.push("/projects/new")} className="bg-accent hover:bg-accent-hover text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Project
-          </Button>
-        )}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          {isContractor ? "Overview of your active projects and bid activity" : "Track your bids and opportunities"}
+        </p>
       </div>
 
       {/* Stats Grid */}
@@ -69,7 +75,7 @@ export default function DashboardPage() {
               icon={Folder}
               description="Currently accepting bids"
             />
-            <StatsCard title="Total Projects" value={userProjects.length} icon={Folder} description="All time" />
+            <StatsCard title="Total Projects" value={userProjects.length} icon={Layers} description="All time" />
             <StatsCard
               title="Bids Received"
               value={totalBidsReceived}
@@ -79,7 +85,7 @@ export default function DashboardPage() {
             <StatsCard
               title="Avg Bids/Project"
               value={avgBidsPerProject}
-              icon={Clock}
+              icon={BarChart3}
               description="Average response rate"
             />
           </>
@@ -91,7 +97,7 @@ export default function DashboardPage() {
               icon={TrendingUp}
               description="Submitted and under review"
             />
-            <StatsCard title="Won Projects" value={awardedBids.length} icon={Folder} description="Awarded contracts" />
+            <StatsCard title="Won Projects" value={awardedBids.length} icon={Trophy} description="Awarded contracts" />
             <StatsCard
               title="Pending Invites"
               value={pendingInvitations.length}
@@ -108,7 +114,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Usage Tracker for FREE users */}
       <div className="mb-8">
         <UsageTracker />
       </div>
@@ -117,9 +122,43 @@ export default function DashboardPage() {
       {isContractor ? (
         <div className="space-y-8">
           <div>
-            <h2 className="text-xl font-semibold text-foreground mb-4">Active Projects</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Active Projects</h2>
+                <p className="text-sm text-muted-foreground">
+                  Projects currently open for bids from subcontractors
+                </p>
+              </div>
+              <div className="inline-flex rounded-full bg-muted px-1 py-1 shadow-sm">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "grid" ? "default" : "ghost"}
+                  className={`h-8 rounded-full px-3 text-xs ${
+                    viewMode === "grid" ? "bg-white text-foreground" : "bg-transparent text-muted-foreground"
+                  }`}
+                  onClick={() => setViewMode("grid")}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5 mr-1.5" />
+                  Grid View
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  className={`h-8 rounded-full px-3 text-xs ${
+                    viewMode === "list" ? "bg-white text-foreground" : "bg-transparent text-muted-foreground"
+                  }`}
+                  onClick={() => setViewMode("list")}
+                >
+                  <List className="h-3.5 w-3.5 mr-1.5" />
+                  List View
+                </Button>
+              </div>
+            </div>
             {activeProjects.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-2">
+              <>
+                <div className={viewMode === "grid" ? "grid gap-6 md:grid-cols-2 xl:grid-cols-4" : "space-y-4"}>
                 {activeProjects.slice(0, 4).map((project) => (
                   <ProjectCard
                     key={project.id}
@@ -127,9 +166,22 @@ export default function DashboardPage() {
                     bidsCount={getBidsByProject(project.id).length}
                     actionHref={`/projects/${project.id}`}
                     actionLabel="View Bids"
+                    viewMode={viewMode}
                   />
                 ))}
-              </div>
+                </div>
+                {activeProjects.length > 4 && (
+                  <div className="mt-6 flex justify-center">
+                    <Button
+                      variant="outline"
+                      className="rounded-full px-6"
+                      onClick={() => router.push("/projects")}
+                    >
+                      Load More Projects
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <EmptyState
                 icon={Folder}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
-import { ProjectCard } from "@/components/project-card"
+import { OpportunityCard } from "@/components/opportunity-card"
 import { EmptyState } from "@/components/empty-state"
 import { Input } from "@/components/ui/input"
 import { Folder, Search } from "lucide-react"
@@ -77,41 +77,55 @@ export default function OpportunitiesPage() {
   return (
     <div className="min-h-screen">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Project Opportunities</h1>
-        <p className="text-sm lg:text-base text-muted-foreground mt-1">Browse available construction projects and submit bids</p>
+        <h1 className="text-3xl font-bold text-foreground">Subcontractor Opportunities</h1>
+        <p className="mt-1 text-sm lg:text-base text-muted-foreground">
+          Find and bid on active commercial construction projects from verified general contractors.
+        </p>
       </div>
 
-      <div className="mb-6 flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="mb-6 flex flex-col gap-4">
+        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+          <TabsList className="inline-flex rounded-full bg-muted p-1">
+            <TabsTrigger
+              value="published"
+              className="rounded-full px-4 py-1.5 text-xs lg:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              Active
+            </TabsTrigger>
+            <TabsTrigger
+              value="all"
+              className="rounded-full px-4 py-1.5 text-xs lg:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              All Projects
+            </TabsTrigger>
+            <TabsTrigger
+              value="closed"
+              className="rounded-full px-4 py-1.5 text-xs lg:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              Closed
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="relative max-w-lg">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search projects..."
+            placeholder="Search projects, GCs, or locations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="h-10 rounded-full border-border bg-background pl-9 text-sm"
           />
         </div>
       </div>
 
-      <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-        <TabsList className="w-full lg:w-auto grid grid-cols-3 lg:flex lg:grid-cols-none">
-          <TabsTrigger value="published" className="text-xs lg:text-sm">
-            Active ({projects.filter((p) => p.status === "PUBLISHED").length})
-          </TabsTrigger>
-          <TabsTrigger value="all" className="text-xs lg:text-sm">All ({projects.length})</TabsTrigger>
-          <TabsTrigger value="closed" className="text-xs lg:text-sm">Closed ({projects.filter((p) => p.status === "CLOSED").length})</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       {availableProjects.length > 0 ? (
-        <div className="grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-2">
+        <div className="space-y-4 lg:space-y-5">
           {availableProjects.map((project) => (
-            <ProjectCard
+            <OpportunityCard
               key={project.id}
               project={project}
               bidsCount={getBidsByProject(project.id).length}
-              actionHref={`/projects/${project.id}`}
-              actionLabel="View & Bid"
+              onViewBid={() => window.location.assign(`/projects/${project.id}`)}
             />
           ))}
         </div>

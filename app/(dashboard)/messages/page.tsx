@@ -13,6 +13,15 @@ import { MessageSquare, Search, MoreHorizontal, Trash2 } from "lucide-react"
 import { ChatRoom } from "@/components/chat-room"
 import { Message, Project, User } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog"
 
 interface Conversation {
   projectId: string
@@ -34,13 +43,20 @@ export default function MessagesPage() {
     markMessageAsRead,
     getMessagesByUser,
     loadAllUsers,
-    loadProjects
+    loadProjects,
+    loadArchivedConversations,
+    archiveConversation,
+    unarchiveConversation,
+    archivedConversations
   } = useStore()
 
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [showConversationsList, setShowConversationsList] = useState(true)
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'ARCHIVE'>('GENERAL')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ projectId: string, otherUserId: string } | null>(null)
 
   // Load messages and related data on component mount
   useEffect(() => {
@@ -51,6 +67,7 @@ export default function MessagesPage() {
           // This ensures we have the necessary data for conversation grouping
           await Promise.all([loadAllUsers(), loadProjects()])
           await getMessagesByUser(currentUser.id)
+          await loadArchivedConversations()
         } catch (error) {
           console.error('Failed to load messages:', error)
         } finally {
@@ -60,7 +77,7 @@ export default function MessagesPage() {
     }
 
     loadData()
-  }, [currentUser, getMessagesByUser, loadAllUsers, loadProjects])
+  }, [currentUser, getMessagesByUser, loadAllUsers, loadProjects, loadArchivedConversations])
 
   // Group messages into conversations by project
   const conversations = useMemo(() => {
@@ -172,6 +189,18 @@ export default function MessagesPage() {
       conv.lastMessage?.text.toLowerCase().includes(searchQuery.toLowerCase())
     )
   }, [conversations, searchQuery])
+  const archivedKey = useMemo(() => {
+    const set = new Set<string>()
+    archivedConversations.forEach(a => set.add(`${a.projectId}::${a.otherUserId}`))
+    return set
+  }, [archivedConversations])
+  const tabConversations = useMemo(() => {
+    return filteredConversations.filter(conv => {
+      const key = `${conv.projectId}::${conv.otherUser.id}`
+      const isArchived = archivedKey.has(key)
+      return activeTab === 'ARCHIVE' ? isArchived : !isArchived
+    })
+  }, [filteredConversations, archivedKey, activeTab])
 
   // Get selected conversation or create a virtual one for new conversations
   const selectedConv = useMemo(() => {
@@ -273,23 +302,22 @@ export default function MessagesPage() {
   }
 
   const handleDeleteConversation = async (projectId: string, otherUserId: string) => {
-    if (!confirm('Are you sure you want to delete this entire conversation? This action cannot be undone.')) return
-
     try {
       const response = await fetch(`/api/messages/conversation?projectId=${projectId}&otherUserId=${otherUserId}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
-        // Refresh messages to update conversation list
+        await unarchiveConversation(projectId, otherUserId)
         if (currentUser) {
           await getMessagesByUser(currentUser.id)
         }
-        // If the deleted conversation was selected, go back to conversation list
         if (selectedConversation === `${projectId}::${otherUserId}`) {
           setSelectedConversation(null)
           setShowConversationsList(true)
         }
+        setDeleteDialogOpen(false)
+        setDeleteTarget(null)
       } else {
         console.error('Failed to delete conversation')
       }
@@ -314,7 +342,7 @@ export default function MessagesPage() {
   return (
     <div className="fixed top-16 left-0 lg:left-64 right-0 bottom-0 flex overflow-hidden">
       {/* Messages List Column - Fixed, with internal scrolling */}
-      <div className={`w-full lg:w-[400px] flex-shrink-0 border-r border-border bg-card flex flex-col ${!showConversationsList ? 'hidden lg:flex' : ''}`}>
+      <div className={`w-full lg:w-[400px] flex-shrink-0 border-r border-border bg-card flex flex-col overflow-x-hidden ${!showConversationsList ? 'hidden lg:flex' : ''}`}>
         {/* Messages Header - Fixed */}
         <div className="flex-shrink-0 px-6 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
@@ -337,11 +365,20 @@ export default function MessagesPage() {
           {/* Tabs */}
           <div className="flex gap-2 mb-4">
             <Button
-              variant="default"
+              variant={activeTab === 'GENERAL' ? "default" : "outline"}
               size="sm"
-              className="rounded-full bg-primary text-primary-foreground"
+              className={activeTab === 'GENERAL' ? "rounded-full bg-primary text-primary-foreground" : "rounded-full"}
+              onClick={() => setActiveTab('GENERAL')}
             >
-              General{conversations.reduce((total, conv) => total + conv.unreadCount, 0) > 0 && ` ${conversations.reduce((total, conv) => total + conv.unreadCount, 0)}`}
+              General
+            </Button>
+            <Button
+              variant={activeTab === 'ARCHIVE' ? "default" : "outline"}
+              size="sm"
+              className={activeTab === 'ARCHIVE' ? "rounded-full bg-primary text-primary-foreground" : "rounded-full"}
+              onClick={() => setActiveTab('ARCHIVE')}
+            >
+              Archive
             </Button>
           </div>
 
@@ -358,11 +395,12 @@ export default function MessagesPage() {
         </div>
 
         {/* Conversations List - Scrollable */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredConversations.length > 0 ? (
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          {tabConversations.length > 0 ? (
             <div>
-              {filteredConversations.map((conversation) => {
+              {tabConversations.map((conversation) => {
                 const isSelected = `${conversation.projectId}::${conversation.otherUser.id}` === selectedConversation
+                const isArchived = archivedKey.has(`${conversation.projectId}::${conversation.otherUser.id}`)
 
                 return (
                   <div
@@ -379,52 +417,71 @@ export default function MessagesPage() {
                           </AvatarFallback>
                         </Avatar>
                       </div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-semibold text-sm truncate">
-                          {conversation.otherUser.name}
-                        </p>
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          {conversation.lastMessage && (
-                            <span className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(conversation.lastMessage.sentAt), { addSuffix: false })}
-                            </span>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                              >
-                                <MoreHorizontal className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => handleDeleteConversation(conversation.projectId, conversation.otherUser.id)}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Conversation
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <p className="font-semibold text-sm truncate">
+                            {conversation.otherUser.name}
+                          </p>
+                          <div className="ml-auto flex items-center gap-2">
+                            {conversation.lastMessage && (
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {formatDistanceToNow(new Date(conversation.lastMessage.sentAt), { addSuffix: false })}
+                              </span>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                >
+                                  <MoreHorizontal className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {!isArchived ? (
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      await archiveConversation(conversation.projectId, conversation.otherUser.id)
+                                    }}
+                                  >
+                                    Archive
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      await unarchiveConversation(conversation.projectId, conversation.otherUser.id)
+                                    }}
+                                  >
+                                    Unarchive
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setDeleteTarget({ projectId: conversation.projectId, otherUserId: conversation.otherUser.id })
+                                    setDeleteDialogOpen(true)
+                                  }}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Conversation
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
-                      </div>
-                      {conversation.lastMessage && (
-                        <p className="text-xs text-muted-foreground truncate mb-1">
-                          {conversation.lastMessage.text}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground truncate">
-                          {conversation.project.title}
-                        </p>
-                        {conversation.unreadCount > 0 && (
-                          <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
-                            {conversation.unreadCount}
-                          </Badge>
+                        {conversation.lastMessage && (
+                          <p className="text-xs text-muted-foreground truncate mt-1">
+                            {conversation.lastMessage.text}
+                          </p>
                         )}
+                        <div className="flex items-center justify-end">
+                          {conversation.unreadCount > 0 && (
+                            <Badge variant="default" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                              {conversation.unreadCount}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -461,6 +518,27 @@ export default function MessagesPage() {
           </div>
         )}
       </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete this entire conversation? This action cannot be undone.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  handleDeleteConversation(deleteTarget.projectId, deleteTarget.otherUserId)
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

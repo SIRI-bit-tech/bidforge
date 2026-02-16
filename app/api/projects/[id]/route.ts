@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma'
 import { verifyJWT } from '@/lib/services/auth'
 import { handleAPIError } from '@/app/api/error-handler/route'
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   let payload: any
 
   try {
@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       )
     }
 
-    const { id } = params
+    const { id } = await context.params
 
     const existingProject = await prisma.project.findUnique({
       where: { id },
@@ -134,4 +134,3 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     })
   }
 }
-

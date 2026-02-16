@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (err) {
     logError('archive conversation error', err, { endpoint: '/api/messages/archive' })
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to archive conversation' }, { status: 500 })
   }
 }
 

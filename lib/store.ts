@@ -326,31 +326,57 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   loadArchivedConversations: async () => {
-    const response = await fetch('/api/messages/archive')
-    if (!response.ok) return
-    const data = await response.json()
-    set({ archivedConversations: data.items || [] })
+    try {
+      const response = await fetch('/api/messages/archive')
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load archived conversations')
+      }
+      set({ archivedConversations: data.items || [] })
+      return data.items || []
+    } catch (err) {
+      console.error('loadArchivedConversations error:', err)
+      throw err
+    }
   },
   archiveConversation: async (projectId: string, otherUserId: string) => {
-    const response = await fetch('/api/messages/archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, otherUserId })
-    })
-    if (!response.ok) return
-    set((state) => ({
-      archivedConversations: [
-        ...state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId)),
-        { projectId, otherUserId }
-      ]
-    }))
+    try {
+      const response = await fetch('/api/messages/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, otherUserId })
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to archive conversation')
+      }
+      set((state) => ({
+        archivedConversations: [
+          ...state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId)),
+          { projectId, otherUserId }
+        ]
+      }))
+    } catch (err) {
+      console.error('archiveConversation error:', err)
+      throw err
+    }
   },
   unarchiveConversation: async (projectId: string, otherUserId: string) => {
-    const response = await fetch(`/api/messages/archive?projectId=${projectId}&otherUserId=${otherUserId}`, { method: 'DELETE' })
-    if (!response.ok) return
-    set((state) => ({
-      archivedConversations: state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId))
-    }))
+    try {
+      const p = encodeURIComponent(projectId)
+      const o = encodeURIComponent(otherUserId)
+      const response = await fetch(`/api/messages/archive?projectId=${p}&otherUserId=${o}`, { method: 'DELETE' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to unarchive conversation')
+      }
+      set((state) => ({
+        archivedConversations: state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId))
+      }))
+    } catch (err) {
+      console.error('unarchiveConversation error:', err)
+      throw err
+    }
   },
 
   checkAuthStatus: async () => {

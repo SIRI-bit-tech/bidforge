@@ -311,19 +311,30 @@ export default function SubcontractorsPage() {
           <div className="mt-6">
             <Pagination>
               <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p-1)) }} />
-                </PaginationItem>
-                {[...Array(Math.ceil(filteredSubcontractors.length / pageSize)).keys()].slice(0,5).map(i => (
-                  <PaginationItem key={i}>
-                    <PaginationLink href="#" isActive={page === i+1} onClick={(e) => { e.preventDefault(); setPage(i+1) }}>
-                      {i+1}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(Math.ceil(filteredSubcontractors.length / pageSize), p+1)) }} />
-                </PaginationItem>
+                {(() => {
+                  const totalPages = Math.ceil(filteredSubcontractors.length / pageSize)
+                  const windowSize = 5
+                  const startIndex = Math.max(0, Math.min((page - 1) - Math.floor(windowSize / 2), Math.max(0, totalPages - windowSize)))
+                  const endIndex = startIndex + Math.min(windowSize, totalPages)
+                  const pages = [...Array(totalPages).keys()].slice(startIndex, endIndex)
+                  return (
+                    <>
+                      <PaginationItem>
+                        <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p - 1)) }} />
+                      </PaginationItem>
+                      {pages.map(i => (
+                        <PaginationItem key={i}>
+                          <PaginationLink href="#" isActive={page === i + 1} onClick={(e) => { e.preventDefault(); setPage(i + 1) }}>
+                            {i + 1}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(totalPages, p + 1)) }} />
+                      </PaginationItem>
+                    </>
+                  )
+                })()}
               </PaginationContent>
             </Pagination>
           </div>

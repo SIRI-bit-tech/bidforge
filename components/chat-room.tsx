@@ -13,6 +13,16 @@ import { MessageFileUpload, AttachmentDisplay } from "./message-file-upload"
 import { useUploadThing } from "@/lib/services/uploadthing"
 import type { MessageAttachment } from "@/lib/types"
 
+const BUCKET_MS = 15000
+function normKeys(msg: any): string[] {
+    const ts = typeof msg.timestamp === 'number' ? msg.timestamp : 0
+    const bucket = Math.floor(ts / BUCKET_MS)
+    const sender = (msg.clientId ?? msg.metadata?.senderId) || 'unknown'
+    const k1 = `${sender}|${msg.text}|${bucket}`
+    const k0 = bucket > 0 ? `${sender}|${msg.text}|${bucket - 1}` : k1
+    return [k1, k0]
+}
+
 interface ChatRoomProps {
     projectId: string
     recipientId: string
@@ -106,15 +116,8 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         setMessages((prev) => {
                             const combined = [...prev]
                             const existingSerials = new Set(combined.map(m => m.serial).filter(Boolean))
-                            // Bucket timestamps to 15s windows to collapse server/client clock drift
-                            const BUCKET_MS = 15000
-                            const normKey = (msg: any) => {
-                                const ts = typeof msg.timestamp === 'number' ? msg.timestamp : 0
-                                const bucket = Math.floor(ts / BUCKET_MS)
-                                const sender = (msg.clientId ?? msg.metadata?.senderId) || 'unknown'
-                                return `${sender}|${msg.text}|${bucket}`
-                            }
-                            const seenKeys = new Set(combined.map(normKey))
+                            const seenKeys = new Set<string>()
+                            combined.forEach(m => normKeys(m).forEach(k => seenKeys.add(k)))
 
                             historicalMessages.forEach(ablyMsg => {
                                 // Check by serial first
@@ -122,22 +125,35 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                     return
                                 }
                                 // Check by normalized sender+text+time bucket (15s window)
-                                const key = normKey(ablyMsg)
-                                if (seenKeys.has(key)) {
+                                const keys = normKeys(ablyMsg)
+                                if (keys.some(k => seenKeys.has(k))) {
                                     return
                                 }
                                 // Add the message if not duplicate
                                 combined.push(ablyMsg)
                                 if (ablyMsg.serial) existingSerials.add(ablyMsg.serial)
-                                seenKeys.add(key)
+                                keys.forEach(k => seenKeys.add(k))
                             })
 
                             // Final deduplication by serial and normalized key
-                            const uniqueMessagesMap = new Map()
+                            const seenSerialsFinal = new Set<string>()
+                            const seenNormFinal = new Set<string>()
+                            const uniqueMessagesMap: Map<string, any> = new Map()
                             combined.forEach(msg => {
-                                const key = msg.serial || normKey(msg)
-                                if (!uniqueMessagesMap.has(key)) {
-                                    uniqueMessagesMap.set(key, msg)
+                                const s = msg.serial as string | undefined
+                                const keys = normKeys(msg)
+                                if (s && seenSerialsFinal.has(s)) {
+                                    return
+                                }
+                                if (keys.some(k => seenNormFinal.has(k))) {
+                                    return
+                                }
+                                if (s) seenSerialsFinal.add(s)
+                                keys.forEach(k => seenNormFinal.add(k))
+                                // Use first key as map key if no serial
+                                const mapKey = s || keys[0]
+                                if (!uniqueMessagesMap.has(mapKey)) {
+                                    uniqueMessagesMap.set(mapKey, msg)
                                 }
                             })
 
@@ -154,19 +170,13 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         // 4. Setup subscriptions only after attached and history loaded
                         const msgSub = r.messages.subscribe((msg) => {
                             setMessages((prev) => {
-                                // Improved deduplication: serial OR normalized sender+text+15s bucket
-                                const BUCKET_MS = 15000
-                                const normKey = (m: any) => {
-                                    const ts = typeof m.timestamp === 'number' ? m.timestamp : 0
-                                    const bucket = Math.floor(ts / BUCKET_MS)
-                                    const sender = (m.clientId ?? m.metadata?.senderId) || 'unknown'
-                                    return `${sender}|${m.text}|${bucket}`
-                                }
                                 const incoming = msg.message
-                                const existingMessage = prev.find(m =>
-                                    m.serial && incoming.serial && m.serial === incoming.serial ||
-                                    normKey(m) === normKey(incoming)
-                                )
+                                const incomingKeySet = new Set(normKeys(incoming))
+                                const existingMessage = prev.find(m => {
+                                    if (m.serial && incoming.serial && m.serial === incoming.serial) return true
+                                    const keys = normKeys(m)
+                                    return keys.some(k => incomingKeySet.has(k))
+                                })
 
                                 if (existingMessage) {
                                     return prev
@@ -193,12 +203,16 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                 const newMessages = [...filtered, msg.message]
                                 
                                 // Final safety check - remove any duplicates by serial or normalized key
-                                const seen = new Set<string>()
+                                const seenSerials = new Set<string>()
+                                const seenNorm = new Set<string>()
                                 const finalMessages: any[] = []
                                 for (const m of newMessages) {
-                                    const key = (m.serial as string) || normKey(m)
-                                    if (seen.has(key)) continue
-                                    seen.add(key)
+                                    const s = m.serial as string | undefined
+                                    const keys = normKeys(m)
+                                    if (s && seenSerials.has(s)) continue
+                                    if (keys.some(k => seenNorm.has(k))) continue
+                                    if (s) seenSerials.add(s)
+                                    keys.forEach(k => seenNorm.add(k))
                                     finalMessages.push(m)
                                 }
                                 

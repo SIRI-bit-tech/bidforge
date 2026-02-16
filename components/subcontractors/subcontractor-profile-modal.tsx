@@ -44,7 +44,9 @@ export function SubcontractorProfileModal({ profile, onOpenChange, onMessage }: 
               </div>
             </div>
           </DialogTitle>
-          <DialogDescription className="px-5 pb-3" />
+          <DialogDescription className="px-5 pb-3">
+            View subcontractor details and contact information. Use the button below to start a conversation.
+          </DialogDescription>
         </DialogHeader>
 
         {profile && (

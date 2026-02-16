@@ -90,47 +90,54 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         // 2. Initialize with existing database messages first
                         setMessages(convertedExistingMessages as any)
 
-                        // 3. Load Ably history and merge with existing messages
-                        const history = await r.messages.history({ limit: 50 })
-                        const historicalMessages = history.items.reverse()
+                        // 3. Optionally load Ably history only when DB has messages
+                        const existing = convertedExistingMessages as any[]
+                        const shouldLoadHistory = existing.length > 0
+                        const historicalMessages = shouldLoadHistory
+                          ? (await r.messages.history({ limit: 50 })).items.reverse()
+                              .filter(m => {
+                                const earliest = Math.min(...existing.map(e => typeof e.timestamp === 'number' ? e.timestamp : 0))
+                                const ts = typeof m.timestamp === 'number' ? m.timestamp : 0
+                                return ts >= earliest - 5000
+                              })
+                          : []
 
                         // Merge database messages with Ably messages, avoiding duplicates
                         setMessages((prev) => {
                             const combined = [...prev]
-                            const existingSerials = new Set(combined.map(m => m.serial))
-                            const existingContentTimestamps = new Set()
-
-                            // Create a set of content+timestamp pairs for faster duplicate detection
-                            combined.forEach(m => {
-                                const timestamp = typeof m.timestamp === 'number' ? m.timestamp : 0
-                                const key = `${m.text}-${Math.floor(timestamp / 1000)}`
-                                existingContentTimestamps.add(key)
-                            })
+                            const existingSerials = new Set(combined.map(m => m.serial).filter(Boolean))
+                            // Bucket timestamps to 15s windows to collapse server/client clock drift
+                            const BUCKET_MS = 15000
+                            const normKey = (msg: any) => {
+                                const ts = typeof msg.timestamp === 'number' ? msg.timestamp : 0
+                                const bucket = Math.floor(ts / BUCKET_MS)
+                                const sender = (msg.clientId ?? msg.metadata?.senderId) || 'unknown'
+                                return `${sender}|${msg.text}|${bucket}`
+                            }
+                            const seenKeys = new Set(combined.map(normKey))
 
                             historicalMessages.forEach(ablyMsg => {
                                 // Check by serial first
                                 if (ablyMsg.serial && existingSerials.has(ablyMsg.serial)) {
                                     return
                                 }
-
-                                // Check by content and timestamp (within 1 second)
-                                const ablyTimestamp = typeof ablyMsg.timestamp === 'number' ? ablyMsg.timestamp : 0
-                                const contentKey = `${ablyMsg.text}-${Math.floor(ablyTimestamp / 1000)}`
-                                if (existingContentTimestamps.has(contentKey)) {
+                                // Check by normalized sender+text+time bucket (15s window)
+                                const key = normKey(ablyMsg)
+                                if (seenKeys.has(key)) {
                                     return
                                 }
-
                                 // Add the message if not duplicate
                                 combined.push(ablyMsg)
                                 if (ablyMsg.serial) existingSerials.add(ablyMsg.serial)
-                                existingContentTimestamps.add(contentKey)
+                                seenKeys.add(key)
                             })
 
-                            // Final deduplication by serial
+                            // Final deduplication by serial and normalized key
                             const uniqueMessagesMap = new Map()
                             combined.forEach(msg => {
-                                if (!uniqueMessagesMap.has(msg.serial)) {
-                                    uniqueMessagesMap.set(msg.serial, msg)
+                                const key = msg.serial || normKey(msg)
+                                if (!uniqueMessagesMap.has(key)) {
+                                    uniqueMessagesMap.set(key, msg)
                                 }
                             })
 
@@ -147,20 +154,18 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                         // 4. Setup subscriptions only after attached and history loaded
                         const msgSub = r.messages.subscribe((msg) => {
                             setMessages((prev) => {
-                                // Improved deduplication logic - more comprehensive checks
-                                const existingMessage = prev.find(m => 
-                                    // Check by serial first (most reliable)
-                                    m.serial === msg.message.serial || 
-                                    // Check by exact text and sender (within 5 seconds)
-                                    (m.text === msg.message.text && 
-                                     m.clientId === msg.message.clientId &&
-                                     typeof m.timestamp === 'number' &&
-                                     typeof msg.message.timestamp === 'number' &&
-                                     Math.abs(m.timestamp - msg.message.timestamp) < 5000) ||
-                                    // Check by exact text only (last resort for same session)
-                                    (m.text === msg.message.text && 
-                                     m.clientId === msg.message.clientId &&
-                                     prev.filter(p => p.text === msg.message.text).length > 2)
+                                // Improved deduplication: serial OR normalized sender+text+15s bucket
+                                const BUCKET_MS = 15000
+                                const normKey = (m: any) => {
+                                    const ts = typeof m.timestamp === 'number' ? m.timestamp : 0
+                                    const bucket = Math.floor(ts / BUCKET_MS)
+                                    const sender = (m.clientId ?? m.metadata?.senderId) || 'unknown'
+                                    return `${sender}|${m.text}|${bucket}`
+                                }
+                                const incoming = msg.message
+                                const existingMessage = prev.find(m =>
+                                    m.serial && incoming.serial && m.serial === incoming.serial ||
+                                    normKey(m) === normKey(incoming)
                                 )
 
                                 if (existingMessage) {
@@ -173,9 +178,11 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                     if (!isOptimistic) return true
 
                                     const textMatches = m.text === msg.message.text
-                                    const timeClose = typeof m.timestamp === 'number' &&
-                                        typeof msg.message.timestamp === 'number' &&
-                                        Math.abs(m.timestamp - msg.message.timestamp) < 5000
+                                    const timeClose = (() => {
+                                        const ts1 = typeof m.timestamp === 'number' ? m.timestamp : 0
+                                        const ts2 = typeof msg.message.timestamp === 'number' ? msg.message.timestamp : 0
+                                        return Math.abs(ts1 - ts2) < 15000
+                                    })()
 
                                     if (textMatches && timeClose) {
                                         return false // Remove this optimistic message
@@ -185,13 +192,15 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
 
                                 const newMessages = [...filtered, msg.message]
                                 
-                                // Final safety check - remove any duplicates that might have slipped through
-                                const finalMessages = newMessages.filter((msg, index, self) => 
-                                    index === self.findIndex(m => 
-                                        m.serial === msg.serial || 
-                                        (m.text === msg.text && m.clientId === msg.clientId)
-                                    )
-                                )
+                                // Final safety check - remove any duplicates by serial or normalized key
+                                const seen = new Set<string>()
+                                const finalMessages: any[] = []
+                                for (const m of newMessages) {
+                                    const key = (m.serial as string) || normKey(m)
+                                    if (seen.has(key)) continue
+                                    seen.add(key)
+                                    finalMessages.push(m)
+                                }
                                 
                                 return finalMessages
                             })

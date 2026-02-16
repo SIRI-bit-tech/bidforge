@@ -31,6 +31,7 @@ interface AppState {
   invitations: Invitation[]
   messages: Message[]
   notifications: Notification[]
+  archivedConversations: { projectId: string; otherUserId: string }[]
 
   // Auth actions
   login: (email: string, password: string) => Promise<User>
@@ -47,6 +48,9 @@ interface AppState {
   loadCompanies: () => Promise<Company[]>
   loadProjects: () => Promise<Project[]>
   loadSubcontractors: () => Promise<User[]>
+  loadArchivedConversations: () => Promise<void>
+  archiveConversation: (projectId: string, otherUserId: string) => Promise<void>
+  unarchiveConversation: (projectId: string, otherUserId: string) => Promise<void>
 
   // Company actions
   createCompany: (data: Partial<Company>) => Company
@@ -130,6 +134,7 @@ export const useStore = create<AppState>((set, get) => ({
   ...seedData(),
   currentUser: null,
   isAuthenticated: false,
+  archivedConversations: [],
 
   // Auth actions
   login: async (email: string, password: string) => {
@@ -319,6 +324,33 @@ export const useStore = create<AppState>((set, get) => ({
       set({ currentUser: null, isAuthenticated: false })
       return null
     }
+  },
+  loadArchivedConversations: async () => {
+    const response = await fetch('/api/messages/archive')
+    if (!response.ok) return
+    const data = await response.json()
+    set({ archivedConversations: data.items || [] })
+  },
+  archiveConversation: async (projectId: string, otherUserId: string) => {
+    const response = await fetch('/api/messages/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, otherUserId })
+    })
+    if (!response.ok) return
+    set((state) => ({
+      archivedConversations: [
+        ...state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId)),
+        { projectId, otherUserId }
+      ]
+    }))
+  },
+  unarchiveConversation: async (projectId: string, otherUserId: string) => {
+    const response = await fetch(`/api/messages/archive?projectId=${projectId}&otherUserId=${otherUserId}`, { method: 'DELETE' })
+    if (!response.ok) return
+    set((state) => ({
+      archivedConversations: state.archivedConversations.filter(a => !(a.projectId === projectId && a.otherUserId === otherUserId))
+    }))
   },
 
   checkAuthStatus: async () => {

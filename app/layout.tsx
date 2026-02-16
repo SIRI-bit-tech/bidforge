@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 // import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
@@ -10,23 +10,13 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { AblyProvider } from "@/hooks/use-ably-chat"
 import { RealTimeManager } from "@/components/real-time-manager"
 import { LayoutWrapper } from "@/components/layout-wrapper"
+import { PWARegister } from "@/components/pwa-register"
 
-// const _geist = Geist({ 
-//   subsets: ["latin"],
-//   display: "swap",
-//   fallback: ["system-ui", "arial"]
-// })
-// const _geistMono = Geist_Mono({ 
-//   subsets: ["latin"],
-//   display: "swap",
-//   fallback: ["monospace"]
-// })
 
 export const metadata: Metadata = {
   title: "BidForge - Construction Bid Management Platform",
   description:
     "Connect general contractors with qualified subcontractors. Streamline RFPs, compare bids in real-time, and award contracts with confidence.",
-  generator: "v0.app",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -83,6 +73,10 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: "#000000",
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -95,6 +89,7 @@ export default function RootLayout({
           <LayoutWrapper>
             <URQLProvider>{children}</URQLProvider>
           </LayoutWrapper>
+          <PWARegister />
           <Toaster />
           <Analytics />
         </ErrorBoundary>

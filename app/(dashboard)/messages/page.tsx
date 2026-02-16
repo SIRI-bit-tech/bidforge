@@ -191,7 +191,9 @@ export default function MessagesPage() {
   }, [conversations, searchQuery])
   const archivedKey = useMemo(() => {
     const set = new Set<string>()
-    archivedConversations.forEach(a => set.add(`${a.projectId}::${a.otherUserId}`))
+    archivedConversations.forEach(a => {
+      set.add(`${a.projectId}::${a.otherUserId}`)
+    })
     return set
   }, [archivedConversations])
   const tabConversations = useMemo(() => {

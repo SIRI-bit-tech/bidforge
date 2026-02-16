@@ -1,5 +1,3 @@
-importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js')
-
 const APP_CACHE = 'bidforge-app-v1'
 const APP_SHELL = ['/', '/offline', '/manifest.json']
 
@@ -12,75 +10,52 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== APP_CACHE).map((k) => caches.delete(k)))
-    )
+    (async () => {
+      const allowlist = new Set([APP_CACHE, 'pages', 'assets', 'static'])
+      const keys = await caches.keys()
+      await Promise.all(keys.filter((k) => !allowlist.has(k)).map((k) => caches.delete(k)))
+    })()
   )
   self.clients.claim()
 })
 
-if (self.workbox) {
-  workbox.setConfig({ debug: false })
-  // Navigation: Network-first with offline fallback
-  workbox.routing.registerRoute(
-    ({ request }) => request.mode === 'navigate',
-    async ({ event }) => {
-      try {
-        return await workbox.strategies.networkFirst({
-          cacheName: 'pages',
-          networkTimeoutSeconds: 4,
-          plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 7 * 24 * 3600 })],
-        }).handle({ event })
-      } catch {
-        const cached = await caches.match('/offline')
-        return cached || Response.error()
-      }
-    }
-  )
-
-  // Static assets: stale-while-revalidate
-  workbox.routing.registerRoute(
-    ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/_next/'),
-    new workbox.strategies.StaleWhileRevalidate({ cacheName: 'assets' })
-  )
-
-  // Images/fonts: cache-first with expiration
-  workbox.routing.registerRoute(
-    ({ request, url }) =>
-      url.origin === self.location.origin &&
-      ['image', 'font', 'style', 'script'].includes(request.destination),
-    new workbox.strategies.CacheFirst({
-      cacheName: 'static',
-      plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 30 * 24 * 3600 })],
-    })
-  )
-
-  // Background sync for non-GET API calls
-  const apiQueue = new workbox.backgroundSync.Queue('api-queue', { maxRetentionTime: 24 * 60 })
-  workbox.routing.registerRoute(
-    ({ url, request }) => url.pathname.startsWith('/api/') && request.method !== 'GET',
-    new workbox.strategies.NetworkOnly({
-      plugins: [
-        {
-          requestWillFetch: async ({ request }) => request,
-          fetchDidFail: async ({ request }) => apiQueue.pushRequest({ request }),
-        },
-      ],
-    }),
-    'POST'
-  )
-}
-
-// Simple IndexedDB for GET /api responses
+// Simple IndexedDB for GET /api responses and a background sync queue for non-GET
 const DB_NAME = 'bidforge-idb'
 const STORE = 'api-cache'
+const QUEUE = 'api-queue'
+let _idb = null
+let _idbOpening = null
 function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+  if (_idb) return Promise.resolve(_idb)
+  if (_idbOpening) return _idbOpening
+  _idbOpening = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 2)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
+      if (!db.objectStoreNames.contains(QUEUE)) db.createObjectStore(QUEUE, { autoIncrement: true })
+    }
+    req.onsuccess = () => {
+      _idb = req.result
+      _idb.onversionchange = () => {
+        try { _idb && _idb.close() } catch {}
+        _idb = null
+      }
+      _idbOpening = null
+      resolve(_idb)
+    }
+    req.onerror = () => {
+      _idbOpening = null
+      reject(req.error)
+    }
   })
+  return _idbOpening
+}
+function idbClose() {
+  if (_idb) {
+    try { _idb.close() } catch {}
+    _idb = null
+  }
 }
 async function idbPut(key, value) {
   const db = await idbOpen()
@@ -100,10 +75,60 @@ async function idbGet(key) {
     req.onerror = () => reject(req.error)
   })
 }
+async function idbPushQueue(value) {
+  const db = await idbOpen()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE, 'readwrite')
+    tx.objectStore(QUEUE).add(value)
+    tx.oncomplete = () => resolve(true)
+    tx.onerror = () => reject(tx.error)
+  })
+}
+async function idbReadAllQueue() {
+  const db = await idbOpen()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE, 'readonly')
+    const req = tx.objectStore(QUEUE).getAll()
+    req.onsuccess = () => resolve(req.result || [])
+    req.onerror = () => reject(req.error)
+  })
+}
+async function idbClearQueue() {
+  const db = await idbOpen()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE, 'readwrite')
+    const req = tx.objectStore(QUEUE).clear()
+    req.onsuccess = () => resolve(true)
+    req.onerror = () => reject(req.error)
+  })
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  if (request.method === 'GET' && new URL(request.url).pathname.startsWith('/api/')) {
+  const url = new URL(request.url)
+  // Queue non-GET API requests for background sync on failure
+  if (url.pathname.startsWith('/api/') && request.method !== 'GET') {
+    event.respondWith(
+      (async () => {
+        try {
+          return await fetch(request)
+        } catch (e) {
+          try {
+            const headers = {}
+            request.headers.forEach((v, k) => (headers[k] = v))
+            const body = await request.clone().text().catch(() => null)
+            await idbPushQueue({ url: request.url, method: request.method, headers, body })
+            if ('sync' in self.registration) {
+              try { await self.registration.sync.register('api-queue') } catch {}
+            }
+          } catch {}
+          throw e
+        }
+      })()
+    )
+    return
+  }
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       (async () => {
         try {
@@ -119,6 +144,93 @@ self.addEventListener('fetch', (event) => {
             return new Response(cached, { headers: { 'Content-Type': 'application/json' } })
           }
           throw new Error('Network and IDB failed')
+        }
+      })()
+    )
+    return
+  }
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const controller = new AbortController()
+          const t = setTimeout(() => controller.abort(), 4000)
+          const res = await fetch(request, { signal: controller.signal })
+          clearTimeout(t)
+          const cache = await caches.open('pages')
+          cache.put(request, res.clone())
+          return res
+        } catch {
+          const cached = (await caches.match(request)) || (await caches.match('/offline'))
+          return cached || Response.error()
+        }
+      })()
+    )
+    return
+  }
+  if (url.origin === self.location.origin && url.pathname.startsWith('/_next/')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open('assets')
+        const cached = await cache.match(request)
+        const fetcher = fetch(request)
+          .then(async (res) => {
+            if (res && res.ok) {
+              await cache.put(request, res.clone())
+            }
+            return res
+          })
+          .catch(() => cached)
+        return cached || fetcher
+      })()
+    )
+    return
+  }
+  if (url.origin === self.location.origin && ['image', 'font', 'style', 'script'].includes(request.destination)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open('static')
+        const cached = await cache.match(request)
+        if (cached) return cached
+        const res = await fetch(request)
+        if (res && res.ok) {
+          await cache.put(request, res.clone())
+        }
+        return res
+      })()
+    )
+    return
+  }
+})
+
+// Background sync: replay queued API requests
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'api-queue') {
+    event.waitUntil(
+      (async () => {
+        try {
+          const items = await idbReadAllQueue()
+          if (!items || items.length === 0) return
+          const failures = []
+          for (const item of items) {
+            try {
+              await fetch(item.url, {
+                method: item.method,
+                headers: item.headers || {},
+                body: item.body ?? undefined,
+              })
+            } catch {
+              failures.push(item)
+            }
+          }
+          await idbClearQueue()
+          // re-enqueue failures
+          for (const f of failures) await idbPushQueue(f)
+          if (failures.length > 0 && 'sync' in self.registration) {
+            try { await self.registration.sync.register('api-queue') } catch {}
+          }
+        } catch {
+          // ignore
         }
       })()
     )

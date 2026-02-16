@@ -78,7 +78,8 @@ model User {
   verificationCodes VerificationCode[]
   invitations      Invitation[]
   adminSessions    AdminSession[]
-  archivedConversations ArchivedConversation[]
+  archivedByMe     ArchivedConversation[] @relation("ArchivedByUser")
+  archivedByOthers ArchivedConversation[] @relation("ArchivedOtherUser")
 
   @@index([companyId])
   @@index([role])
@@ -151,6 +152,7 @@ model Project {
   bids        Bid[]
   invitations Invitation[]
   messages    Message[]
+  archivedConversations ArchivedConversation[]
 
   @@index([createdById])
   @@index([status])
@@ -328,7 +330,9 @@ model ArchivedConversation {
   projectId    String   @map("project_id") @db.Uuid
   otherUserId  String   @map("other_user_id") @db.Uuid
   archivedAt   DateTime @default(now()) @map("archived_at")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation("ArchivedByUser", fields: [userId], references: [id], onDelete: Cascade)
+  otherUser    User     @relation("ArchivedOtherUser", fields: [otherUserId], references: [id], onDelete: Cascade)
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([userId, projectId, otherUserId])
   @@index([userId])

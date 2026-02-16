@@ -88,8 +88,27 @@ async function idbReadAllQueue() {
   const db = await idbOpen()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(QUEUE, 'readonly')
-    const req = tx.objectStore(QUEUE).getAll()
-    req.onsuccess = () => resolve(req.result || [])
+    const store = tx.objectStore(QUEUE)
+    const items = []
+    const cursorReq = store.openCursor()
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result
+      if (cursor) {
+        items.push({ id: cursor.key, value: cursor.value })
+        cursor.continue()
+      } else {
+        resolve(items)
+      }
+    }
+    cursorReq.onerror = () => reject(cursorReq.error)
+  })
+}
+async function idbDeleteByKey(key) {
+  const db = await idbOpen()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE, 'readwrite')
+    const req = tx.objectStore(QUEUE).delete(key)
+    req.onsuccess = () => resolve(true)
     req.onerror = () => reject(req.error)
   })
 }
@@ -209,22 +228,26 @@ self.addEventListener('sync', (event) => {
     event.waitUntil(
       (async () => {
         try {
-          const items = await idbReadAllQueue()
+          const entries = await idbReadAllQueue()
+          const items = entries || []
           if (!items || items.length === 0) return
           const failures = []
-          for (const item of items) {
+          // Process and delete each processed entry by key to avoid dropping concurrent enqueues
+          for (const { id, value } of items) {
             try {
-              await fetch(item.url, {
-                method: item.method,
-                headers: item.headers || {},
-                body: item.body ?? undefined,
+              await fetch(value.url, {
+                method: value.method,
+                headers: value.headers || {},
+                body: value.body ?? undefined,
               })
+              await idbDeleteByKey(id)
             } catch {
-              failures.push(item)
+              // Delete processed item and re-enqueue for later retry
+              await idbDeleteByKey(id)
+              failures.push(value)
             }
           }
-          await idbClearQueue()
-          // re-enqueue failures
+          // Re-enqueue failures
           for (const f of failures) await idbPushQueue(f)
           if (failures.length > 0 && 'sync' in self.registration) {
             try { await self.registration.sync.register('api-queue') } catch {}

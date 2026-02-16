@@ -117,7 +117,11 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                             const combined = [...prev]
                             const existingSerials = new Set(combined.map(m => m.serial).filter(Boolean))
                             const seenKeys = new Set<string>()
-                            combined.forEach(m => normKeys(m).forEach(k => seenKeys.add(k)))
+                            combined.forEach(m => {
+                                normKeys(m).forEach(k => {
+                                    seenKeys.add(k)
+                                })
+                            })
 
                             historicalMessages.forEach(ablyMsg => {
                                 // Check by serial first
@@ -132,7 +136,9 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                 // Add the message if not duplicate
                                 combined.push(ablyMsg)
                                 if (ablyMsg.serial) existingSerials.add(ablyMsg.serial)
-                                keys.forEach(k => seenKeys.add(k))
+                                keys.forEach(k => {
+                                    seenKeys.add(k)
+                                })
                             })
 
                             // Final deduplication by serial and normalized key
@@ -149,7 +155,9 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                     return
                                 }
                                 if (s) seenSerialsFinal.add(s)
-                                keys.forEach(k => seenNormFinal.add(k))
+                                keys.forEach(k => {
+                                    seenNormFinal.add(k)
+                                })
                                 // Use first key as map key if no serial
                                 const mapKey = s || keys[0]
                                 if (!uniqueMessagesMap.has(mapKey)) {
@@ -212,7 +220,9 @@ export function ChatRoom({ projectId, recipientId, recipientName, existingMessag
                                     if (s && seenSerials.has(s)) continue
                                     if (keys.some(k => seenNorm.has(k))) continue
                                     if (s) seenSerials.add(s)
-                                    keys.forEach(k => seenNorm.add(k))
+                                    keys.forEach(k => {
+                                        seenNorm.add(k)
+                                    })
                                     finalMessages.push(m)
                                 }
                                 
